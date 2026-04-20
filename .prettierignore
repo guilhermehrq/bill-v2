@@ -1,0 +1,14 @@
+.next
+node_modules
+dist
+build
+coverage
+pnpm-lock.yaml
+drizzle
+supabase/.branches
+supabase/.temp
+
+# Spec documents — treat as immutable source of truth
+adr-finpessoal-v2.md
+prompt-claude-code-max-finanpessoal-v2.md
+wireframes-finpessoal-v2.md
