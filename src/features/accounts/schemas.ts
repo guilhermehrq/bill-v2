@@ -1,0 +1,17 @@
+import { z } from "zod";
+
+export const createAccountSchema = z.object({
+  name: z.string().trim().min(1, "Informe um nome"),
+  type: z.enum(["checking", "savings", "cash", "investment", "other"]),
+  institution: z.string().trim().optional().or(z.literal("")),
+  initialBalanceCents: z.number().int().finite(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-f]{6}$/i, "Cor inválida")
+    .optional(),
+  icon: z.string().trim().optional(),
+});
+export type CreateAccountInput = z.infer<typeof createAccountSchema>;
+
+export const updateAccountSchema = createAccountSchema.partial();
+export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
