@@ -1,8 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(git config *)",
-      "Read(//home/jamal/.ssh/**)"
-    ]
+    "allow": ["Bash(git config *)", "Read(//home/jamal/.ssh/**)"]
   }
 }
