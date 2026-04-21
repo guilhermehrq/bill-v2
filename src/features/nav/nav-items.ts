@@ -7,6 +7,7 @@ import {
   List,
   RefreshCcw,
   Settings,
+  Tags,
   Target,
   TrendingUp,
   Wallet,
@@ -34,7 +35,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Finanças",
     items: [
       { title: "Extrato", href: "/extrato", icon: List, phase: 2 },
-      { title: "Contas", href: "/contas", icon: Wallet, phase: 2 },
+      { title: "Contas", href: "/contas", icon: Wallet },
+      { title: "Categorias", href: "/categorias", icon: Tags },
       { title: "Cartões", href: "/cartoes", icon: CreditCard, phase: 3 },
       { title: "Investimentos", href: "/investimentos", icon: ArrowRightLeft, phase: 5 },
     ],
