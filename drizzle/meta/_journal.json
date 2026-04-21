@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1776730793026,
+      "tag": "0000_material_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776731000000,
+      "tag": "0001_triggers_and_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776731100000,
+      "tag": "0002_rls_policies",
+      "breakpoints": true
+    }
+  ]
+}
