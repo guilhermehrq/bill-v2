@@ -1,7 +1,8 @@
 import "server-only";
-import { and, between, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
+import { accounts, categories, creditCardInvoices, transactions } from "@/db/schema";
+import type { CreditCardReportMode } from "@/features/settings/queries";
 
 export type MonthlyFlow = {
   month: string; // YYYY-MM-01
@@ -40,7 +41,10 @@ export type DashboardData = {
   }>;
 };
 
-export async function loadDashboard(userId: string): Promise<DashboardData> {
+export async function loadDashboard(
+  userId: string,
+  mode: CreditCardReportMode = "purchase_date",
+): Promise<DashboardData> {
   const now = new Date();
   const currentMonthStart = toFirstOfMonth(now);
   const currentMonthEnd = toLastOfMonth(now);
@@ -86,27 +90,29 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   const activeAccountCount = Number(balanceRow?.count ?? 0);
 
   const [currentMonth, previousMonth] = await Promise.all([
-    loadMonthTotals(userId, currentMonthStart, currentMonthEnd),
-    loadMonthTotals(userId, previousMonthStart, previousMonthEnd),
+    loadMonthTotals(userId, currentMonthStart, currentMonthEnd, mode),
+    loadMonthTotals(userId, previousMonthStart, previousMonthEnd, mode),
   ]);
 
+  const bucketExpr = bucketDateExpr(mode);
   const cashflowRows = await db
     .select({
-      month: sql<string>`to_char(date_trunc('month', ${transactions.date}), 'YYYY-MM-DD')`,
+      month: sql<string>`to_char(date_trunc('month', ${bucketExpr}), 'YYYY-MM-DD')`,
       income: sql<number>`SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amountCents} ELSE 0 END)::bigint`,
       expense: sql<number>`SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amountCents} ELSE 0 END)::bigint`,
     })
     .from(transactions)
+    .leftJoin(creditCardInvoices, eq(transactions.invoiceId, creditCardInvoices.id))
     .where(
       and(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
-        gte(transactions.date, sixMonthsAgo),
-        lte(transactions.date, currentMonthEnd),
+        gte(bucketExpr, sql`${sixMonthsAgo}::date`),
+        lte(bucketExpr, sql`${currentMonthEnd}::date`),
       ),
     )
-    .groupBy(sql`date_trunc('month', ${transactions.date})`)
-    .orderBy(sql`date_trunc('month', ${transactions.date})`);
+    .groupBy(sql`date_trunc('month', ${bucketExpr})`)
+    .orderBy(sql`date_trunc('month', ${bucketExpr})`);
 
   const cashflowByMonth = new Map(
     cashflowRows.map((r) => [
@@ -122,6 +128,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     cashflow.push({ month: key, ...entry });
   }
 
+  const categoryBucket = bucketDateExpr(mode);
   const categoryRows = await db
     .select({
       categoryId: categories.id,
@@ -131,12 +138,14 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(creditCardInvoices, eq(transactions.invoiceId, creditCardInvoices.id))
     .where(
       and(
         eq(transactions.userId, userId),
         eq(transactions.type, "expense"),
         eq(transactions.isPaid, true),
-        between(transactions.date, currentMonthStart, currentMonthEnd),
+        gte(categoryBucket, sql`${currentMonthStart}::date`),
+        lte(categoryBucket, sql`${currentMonthEnd}::date`),
       ),
     )
     .groupBy(categories.id)
@@ -195,24 +204,50 @@ async function loadMonthTotals(
   userId: string,
   from: string,
   to: string,
+  mode: CreditCardReportMode,
 ): Promise<{ incomeCents: number; expenseCents: number; netCents: number }> {
+  const bucket = bucketDateExpr(mode);
+
   const [row] = (await db
     .select({
       income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
     })
     .from(transactions)
+    .leftJoin(creditCardInvoices, eq(transactions.invoiceId, creditCardInvoices.id))
     .where(
       and(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
-        between(transactions.date, from, to),
+        gte(bucket, sql`${from}::date`),
+        lte(bucket, sql`${to}::date`),
       ),
     )) as [{ income: number | string; expense: number | string }];
 
   const incomeCents = Number(row?.income ?? 0);
   const expenseCents = Number(row?.expense ?? 0);
   return { incomeCents, expenseCents, netCents: incomeCents - expenseCents };
+}
+
+// Returns the SQL expression to use as the "when this transaction counts" date
+// based on the report mode. Account transactions always use transactions.date;
+// card transactions differ by mode:
+//  - installment_date: each parcel counts on its own date
+//  - purchase_date:    all parcels count on the original purchase date
+//  - invoice_date:     counts on credit_card_invoices.reference_month
+function bucketDateExpr(mode: CreditCardReportMode): SQL<Date> {
+  switch (mode) {
+    case "installment_date":
+      return sql<Date>`${transactions.date}`;
+    case "purchase_date":
+      return sql<Date>`COALESCE(${transactions.purchaseDate}, ${transactions.date})`;
+    case "invoice_date":
+      return sql<Date>`CASE
+        WHEN ${transactions.creditCardId} IS NOT NULL AND ${creditCardInvoices.referenceMonth} IS NOT NULL
+          THEN ${creditCardInvoices.referenceMonth}
+        ELSE ${transactions.date}
+      END`;
+  }
 }
 
 function toFirstOfMonth(d: Date): string {
