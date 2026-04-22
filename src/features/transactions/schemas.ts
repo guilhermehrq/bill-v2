@@ -15,12 +15,23 @@ export const createIncomeOrExpenseSchema = z
     creditCardId: z.string().uuid().nullable().optional(),
     categoryId: z.string().uuid().nullable().optional(),
     isPaid: z.boolean().default(true),
+    installmentTotal: z.number().int().min(1).max(24).optional(),
     ...baseFields,
   })
   .refine((d) => Boolean(d.accountId) !== Boolean(d.creditCardId), {
     message: "Escolha uma conta ou um cartão (não os dois)",
     path: ["accountId"],
-  });
+  })
+  .refine(
+    (d) =>
+      !d.installmentTotal ||
+      d.installmentTotal === 1 ||
+      (d.type === "expense" && Boolean(d.creditCardId)),
+    {
+      message: "Parcelamento só vale para despesas no cartão",
+      path: ["installmentTotal"],
+    },
+  );
 export type CreateIncomeOrExpenseInput = z.infer<typeof createIncomeOrExpenseSchema>;
 
 export const createTransferSchema = z

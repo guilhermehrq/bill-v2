@@ -78,6 +78,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [isPaid, setIsPaid] = useState(true);
   const [notes, setNotes] = useState("");
+  const [installments, setInstallments] = useState(1);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +99,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       setDate(new Date().toISOString().slice(0, 10));
       setIsPaid(true);
       setNotes("");
+      setInstallments(1);
       setError(null);
       return;
     }
@@ -210,6 +212,9 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         return;
       }
 
+      const isCardExpense =
+        paymentTarget!.kind === "card" && type === "expense" && installments > 1;
+
       const result = await createTransactionAction({
         type,
         accountId: paymentTarget!.kind === "account" ? paymentTarget!.id : null,
@@ -221,12 +226,15 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         isPaid,
         notes: notes.trim() || undefined,
         tags: [],
+        installmentTotal: isCardExpense ? installments : undefined,
       });
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      toast.success("Transação criada");
+      toast.success(
+        isCardExpense ? `Parcelamento em ${installments}x registrado` : "Transação criada",
+      );
       close();
     });
   }
@@ -413,6 +421,35 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
+          {!editingId && isCard && type === "expense" && (
+            <div className="space-y-2">
+              <Label htmlFor="installments">Parcelamento</Label>
+              <Select
+                value={String(installments)}
+                onValueChange={(v) => setInstallments(Number(v))}
+              >
+                <SelectTrigger id="installments">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  <SelectItem value="1">À vista</SelectItem>
+                  {Array.from({ length: 23 }, (_, i) => i + 2).map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}x
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {installments > 1 && (
+                <InstallmentPreview
+                  installments={installments}
+                  amountText={amount}
+                  startDate={date}
+                />
+              )}
+            </div>
+          )}
+
           {type !== "transfer" && !isCard && (
             <div className="flex items-center gap-2">
               <Checkbox
@@ -448,5 +485,47 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function InstallmentPreview({
+  installments,
+  amountText,
+  startDate,
+}: {
+  installments: number;
+  amountText: string;
+  startDate: string;
+}) {
+  const amount = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return (
+      <p className="text-muted-foreground text-xs">
+        {installments}x — preencha o valor para ver a prévia.
+      </p>
+    );
+  }
+  const totalCents = toCents(amount);
+  const base = Math.floor(totalCents / installments);
+  const remainder = totalCents - base * installments;
+  const firstCents = remainder > 0 ? base + 1 : base;
+  const rest = base;
+
+  const [y, m, d] = startDate.split("-").map(Number) as [number, number, number];
+  const firstDate = new Date(y, m - 1, d);
+  const lastDate = new Date(y, m - 1 + (installments - 1), d);
+
+  const pt = (date: Date) =>
+    `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getFullYear()).slice(-2)}`;
+
+  const equal = remainder === 0;
+  const valueLabel = equal
+    ? `${installments}× R$ ${(rest / 100).toFixed(2).replace(".", ",")}`
+    : `1× R$ ${(firstCents / 100).toFixed(2).replace(".", ",")} + ${installments - 1}× R$ ${(rest / 100).toFixed(2).replace(".", ",")}`;
+
+  return (
+    <p className="text-muted-foreground text-xs">
+      {valueLabel} · primeira em {pt(firstDate)}, última em {pt(lastDate)}.
+    </p>
   );
 }

@@ -115,7 +115,25 @@ export async function createTransactionAction(
     isPaid,
     notes,
     tags,
+    installmentTotal,
   } = parsed.data;
+
+  // Installments: split amount across N rows with distributable cents.
+  if (installmentTotal && installmentTotal > 1 && creditCardId) {
+    const firstId = await createInstallments(uid, {
+      creditCardId,
+      categoryId: categoryId ?? null,
+      description,
+      amountCents,
+      date,
+      notes: notes || null,
+      tags: tags ?? [],
+      installmentTotal,
+    });
+    if (!firstId) return { ok: false, error: "Falha ao criar parcelamento" };
+    revalidate();
+    return { ok: true, data: { id: firstId } };
+  }
 
   const [row] = await db
     .insert(transactions)
@@ -361,4 +379,82 @@ export async function duplicateTransactionAction(
 
   revalidate();
   return { ok: true, data: { id: copy.id } };
+}
+
+async function createInstallments(
+  userId: string,
+  params: {
+    creditCardId: string;
+    categoryId: string | null;
+    description: string;
+    amountCents: number;
+    date: string;
+    notes: string | null;
+    tags: string[];
+    installmentTotal: number;
+  },
+): Promise<string | null> {
+  const { installmentTotal, amountCents } = params;
+  const base = Math.floor(amountCents / installmentTotal);
+  const remainder = amountCents - base * installmentTotal;
+  const amounts = Array.from({ length: installmentTotal }, (_, i) =>
+    i < remainder ? base + 1 : base,
+  );
+
+  const [year, month, day] = params.date.split("-").map(Number) as [number, number, number];
+  const installmentDates: string[] = [];
+  for (let i = 0; i < installmentTotal; i++) {
+    const d = new Date(year, month - 1 + i, day);
+    // Clamp to last day of month if day overflowed.
+    const lastDayOfTargetMonth = new Date(year, month + i, 0).getDate();
+    if (d.getDate() !== day) d.setDate(lastDayOfTargetMonth);
+    installmentDates.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
+  }
+
+  return await db.transaction(async (tx) => {
+    const firstDate = installmentDates[0]!;
+    const [first] = await tx
+      .insert(transactions)
+      .values({
+        userId,
+        type: "expense",
+        description: `${params.description} (1/${installmentTotal})`,
+        amountCents: amounts[0]!,
+        date: firstDate,
+        purchaseDate: firstDate,
+        creditCardId: params.creditCardId,
+        categoryId: params.categoryId,
+        isPaid: true,
+        installmentNumber: 1,
+        installmentTotal,
+        notes: params.notes,
+        tags: params.tags,
+      })
+      .returning({ id: transactions.id });
+
+    if (!first) return null;
+
+    for (let i = 1; i < installmentTotal; i++) {
+      await tx.insert(transactions).values({
+        userId,
+        type: "expense",
+        description: `${params.description} (${i + 1}/${installmentTotal})`,
+        amountCents: amounts[i]!,
+        date: installmentDates[i]!,
+        // purchase_date is copied from the first row by trigger fn_set_purchase_date.
+        purchaseDate: firstDate,
+        creditCardId: params.creditCardId,
+        categoryId: params.categoryId,
+        isPaid: true,
+        installmentOfId: first.id,
+        installmentNumber: i + 1,
+        installmentTotal,
+        tags: params.tags,
+      });
+    }
+
+    return first.id;
+  });
 }
