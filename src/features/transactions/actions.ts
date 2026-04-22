@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { transactions } from "@/db/schema";
@@ -143,11 +143,20 @@ export async function updateTransactionAction(
   const uid = await requireUserId();
   if (typeof uid !== "string") return { ok: false, error: uid.error };
 
+  // Check if this is a transfer — transfers mirror updates to both rows
+  // so the pair stays in sync (except for accountId, which is unique per row).
+  const [existing] = await db
+    .select({ type: transactions.type, pairId: transactions.transferPairId })
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, uid)))
+    .limit(1);
+
+  if (!existing) return { ok: false, error: "Transação não encontrada" };
+
   const updates: Partial<typeof transactions.$inferInsert> = { updatedAt: new Date() };
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
   if (parsed.data.amountCents !== undefined) updates.amountCents = parsed.data.amountCents;
   if (parsed.data.date !== undefined) updates.date = parsed.data.date;
-  if (parsed.data.accountId !== undefined) updates.accountId = parsed.data.accountId ?? null;
   if (parsed.data.categoryId !== undefined) updates.categoryId = parsed.data.categoryId ?? null;
   if (parsed.data.isPaid !== undefined) {
     updates.isPaid = parsed.data.isPaid;
@@ -156,17 +165,100 @@ export async function updateTransactionAction(
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
   if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
 
-  const result = await db
-    .update(transactions)
-    .set(updates)
-    .where(and(eq(transactions.id, id), eq(transactions.userId, uid)))
-    .returning({ id: transactions.id });
+  // accountId is only meaningful per-row, not mirrored
+  const perRowUpdates = { ...updates };
+  if (parsed.data.accountId !== undefined) perRowUpdates.accountId = parsed.data.accountId ?? null;
 
-  if (result.length === 0) return { ok: false, error: "Transação não encontrada" };
+  const targetIds = existing.type === "transfer" && existing.pairId ? [id, existing.pairId] : [id];
+
+  if (existing.type === "transfer" && existing.pairId) {
+    // For the edited row apply account change, for the mirror keep its account but sync the rest.
+    await db
+      .update(transactions)
+      .set(perRowUpdates)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, uid)));
+    await db
+      .update(transactions)
+      .set(updates)
+      .where(and(eq(transactions.id, existing.pairId), eq(transactions.userId, uid)));
+  } else {
+    await db
+      .update(transactions)
+      .set(perRowUpdates)
+      .where(and(inArray(transactions.id, targetIds), eq(transactions.userId, uid)));
+  }
 
   revalidate();
   return { ok: true, data: undefined };
 }
+
+export async function loadTransactionForEditAction(
+  id: string,
+): Promise<ActionResult<TransactionForEdit>> {
+  const uid = await requireUserId();
+  if (typeof uid !== "string") return { ok: false, error: uid.error };
+
+  const [row] = await db
+    .select({
+      id: transactions.id,
+      description: transactions.description,
+      amountCents: transactions.amountCents,
+      type: transactions.type,
+      date: transactions.date,
+      isPaid: transactions.isPaid,
+      notes: transactions.notes,
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      transferPairId: transactions.transferPairId,
+      transferDirection: transactions.transferDirection,
+    })
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, uid)))
+    .limit(1);
+
+  if (!row) return { ok: false, error: "Transação não encontrada" };
+
+  let mirrorAccountId: string | null = null;
+  if (row.type === "transfer" && row.transferPairId) {
+    const [mirror] = await db
+      .select({ accountId: transactions.accountId })
+      .from(transactions)
+      .where(and(eq(transactions.id, row.transferPairId), eq(transactions.userId, uid)))
+      .limit(1);
+    mirrorAccountId = mirror?.accountId ?? null;
+  }
+
+  return {
+    ok: true,
+    data: {
+      id: row.id,
+      description: row.description,
+      amountCents: Number(row.amountCents),
+      type: row.type,
+      date: row.date,
+      isPaid: row.isPaid,
+      notes: row.notes,
+      accountId: row.accountId,
+      categoryId: row.categoryId,
+      transferDirection: row.transferDirection,
+      transferPairAccountId: mirrorAccountId,
+    },
+  };
+}
+
+export type TransactionForEdit = {
+  id: string;
+  description: string;
+  amountCents: number;
+  type: "income" | "expense" | "transfer";
+  date: string;
+  isPaid: boolean;
+  notes: string | null;
+  accountId: string | null;
+  categoryId: string | null;
+  transferDirection: "in" | "out" | null;
+  transferPairAccountId: string | null;
+};
 
 export async function togglePaidAction(id: string, isPaid: boolean): Promise<ActionResult> {
   const uid = await requireUserId();
@@ -192,7 +284,6 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   const uid = await requireUserId();
   if (typeof uid !== "string") return { ok: false, error: uid.error };
 
-  // For transfers, delete both sides.
   const [existing] = await db
     .select({ type: transactions.type, pairId: transactions.transferPairId })
     .from(transactions)
@@ -201,21 +292,12 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
 
   if (!existing) return { ok: false, error: "Transação não encontrada" };
 
-  if (existing.type === "transfer" && existing.pairId) {
-    await db.delete(transactions).where(
-      and(
-        eq(transactions.userId, uid),
-        // delete both rows
-      ),
-    );
-    // Re-issue as two explicit deletes to keep WHERE clauses simple.
-    await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, uid)));
-    await db
-      .delete(transactions)
-      .where(and(eq(transactions.id, existing.pairId), eq(transactions.userId, uid)));
-  } else {
-    await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, uid)));
-  }
+  const idsToDelete =
+    existing.type === "transfer" && existing.pairId ? [id, existing.pairId] : [id];
+
+  await db
+    .delete(transactions)
+    .where(and(inArray(transactions.id, idsToDelete), eq(transactions.userId, uid)));
 
   revalidate();
   return { ok: true, data: undefined };

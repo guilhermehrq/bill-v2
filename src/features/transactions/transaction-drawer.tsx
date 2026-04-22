@@ -25,7 +25,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { toCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import { createTransactionAction, updateTransactionAction } from "./actions";
+import {
+  createTransactionAction,
+  loadTransactionForEditAction,
+  updateTransactionAction,
+} from "./actions";
+import { toReais } from "@/lib/money";
 import { useTransactionDrawer } from "./transaction-drawer-store";
 import type { FormAccountOption, FormCategoryOption, TransactionTypeValue } from "./types";
 
@@ -52,7 +57,9 @@ export function TransactionDrawer({ accounts, categories }: Props) {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    if (open && !editingId) {
+    if (!open) return;
+
+    if (!editingId) {
       setType(defaults.type ?? "expense");
       setAmount("");
       setDescription("");
@@ -63,7 +70,32 @@ export function TransactionDrawer({ accounts, categories }: Props) {
       setIsPaid(true);
       setNotes("");
       setError(null);
+      return;
     }
+
+    let cancelled = false;
+    setError(null);
+    loadTransactionForEditAction(editingId).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const t = result.data;
+      setType(t.type);
+      setAmount(toReais(t.amountCents).toFixed(2).replace(".", ","));
+      setDescription(t.description);
+      setCategoryId(t.categoryId);
+      setAccountId(t.accountId);
+      setDestAccountId(t.type === "transfer" ? t.transferPairAccountId : null);
+      setDate(t.date);
+      setIsPaid(t.isPaid);
+      setNotes(t.notes ?? "");
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, editingId, defaults, accounts]);
 
   const filteredCategories = useMemo(
@@ -251,7 +283,11 @@ export function TransactionDrawer({ accounts, categories }: Props) {
             <>
               <div className="space-y-2">
                 <Label htmlFor="source">De (origem) *</Label>
-                <Select value={accountId ?? undefined} onValueChange={(v) => setAccountId(v)}>
+                <Select
+                  value={accountId ?? undefined}
+                  onValueChange={(v) => setAccountId(v)}
+                  disabled={Boolean(editingId)}
+                >
                   <SelectTrigger id="source">
                     <SelectValue placeholder="Selecione a conta de origem" />
                   </SelectTrigger>
@@ -269,6 +305,7 @@ export function TransactionDrawer({ accounts, categories }: Props) {
                 <Select
                   value={destAccountId ?? undefined}
                   onValueChange={(v) => setDestAccountId(v)}
+                  disabled={Boolean(editingId)}
                 >
                   <SelectTrigger id="destination">
                     <SelectValue placeholder="Selecione a conta de destino" />
@@ -284,6 +321,12 @@ export function TransactionDrawer({ accounts, categories }: Props) {
                   </SelectContent>
                 </Select>
               </div>
+              {editingId && (
+                <p className="text-muted-foreground text-xs">
+                  As contas de uma transferência são imutáveis. Delete e crie uma nova se precisar
+                  trocar.
+                </p>
+              )}
             </>
           ) : (
             <div className="space-y-2">
