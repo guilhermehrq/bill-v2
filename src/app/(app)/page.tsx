@@ -1,55 +1,121 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CashflowChart } from "@/features/dashboard/cashflow-chart";
+import { CategoryDonut } from "@/features/dashboard/category-donut";
+import { KpiCard } from "@/features/dashboard/kpi-card";
+import { loadDashboard } from "@/features/dashboard/queries";
+import { UpcomingList } from "@/features/dashboard/upcoming-list";
 import { createClient } from "@/lib/supabase/server";
+
+export const metadata = { title: "Dashboard · FinPessoal" };
 
 export default async function HomePage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const displayName =
-    (typeof user?.user_metadata?.full_name === "string" && user.user_metadata.full_name) ||
-    user?.email ||
+    (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name) ||
+    user.email ||
     "visitante";
+
+  const data = await loadDashboard(user.id);
+
+  const incomeDelta = data.currentMonth.incomeCents - data.previousMonth.incomeCents;
+  const expenseDelta = data.currentMonth.expenseCents - data.previousMonth.expenseCents;
+
+  if (data.activeAccountCount === 0) {
+    return <EmptyState name={displayName} />;
+  }
 
   return (
     <div className="space-y-6 py-4">
       <header>
         <h1 className="text-2xl font-semibold">Olá, {displayName} 👋</h1>
-        <p className="text-muted-foreground text-sm">
-          Fase 1 concluída — auth, schema, RLS e shell autenticado no ar.
-        </p>
+        <p className="text-muted-foreground text-sm">Visão geral do mês atual.</p>
       </header>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <KpiCard label="Saldo total" valueCents={data.totalBalanceCents} />
+        <KpiCard
+          label="Receitas do mês"
+          valueCents={data.currentMonth.incomeCents}
+          tone="income"
+          deltaCents={incomeDelta}
+          deltaLabel="vs. mês anterior"
+        />
+        <KpiCard
+          label="Despesas do mês"
+          valueCents={data.currentMonth.expenseCents}
+          tone="expense"
+          deltaCents={expenseDelta}
+          deltaLabel="vs. mês anterior"
+        />
+        <KpiCard label="Saldo do mês" valueCents={data.currentMonth.netCents} />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Próximas fases</CardTitle>
-            <CardDescription>Roadmap do desenvolvimento</CardDescription>
+            <CardTitle className="text-base">Fluxo de caixa</CardTitle>
+            <CardDescription>Últimos 6 meses</CardDescription>
           </CardHeader>
-          <CardContent className="text-muted-foreground space-y-1 text-sm">
-            <p>• Fase 2 — contas, categorias, transações, dashboard</p>
-            <p>• Fase 3 — cartões e faturas</p>
-            <p>• Fase 4 — orçamentos, recorrências, metas</p>
-            <p>• Fase 5 — relatórios, investimentos, polish</p>
-            <p>• Fase 2.5 — importador Organizze (pós-MVP)</p>
+          <CardContent>
+            <CashflowChart data={data.cashflow} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Status atual</CardTitle>
-            <CardDescription>O que funciona hoje</CardDescription>
+            <CardTitle className="text-base">Despesas por categoria</CardTitle>
+            <CardDescription>Mês atual</CardDescription>
           </CardHeader>
-          <CardContent className="text-muted-foreground space-y-1 text-sm">
-            <p>✓ 13 tabelas no Postgres com RLS</p>
-            <p>✓ Triggers de fatura e purchase_date</p>
-            <p>✓ Signup / login / reset / OAuth Google</p>
-            <p>✓ Shell com sidebar, topbar e bottom nav</p>
-            <p>✓ Teste de isolamento multi-tenant passando</p>
+          <CardContent>
+            <CategoryDonut data={data.expensesByCategory} />
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Próximos 7 dias</CardTitle>
+          <CardDescription>Transações previstas para vencer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UpcomingList items={data.upcoming} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EmptyState({ name }: { name: string }) {
+  return (
+    <div className="space-y-6 py-4">
+      <header>
+        <h1 className="text-2xl font-semibold">Bem-vindo, {name} 👋</h1>
+        <p className="text-muted-foreground text-sm">Vamos configurar sua primeira conta.</p>
+      </header>
+      <Card className="mx-auto max-w-md text-center">
+        <CardHeader>
+          <CardTitle>Sua primeira conta</CardTitle>
+          <CardDescription>
+            Crie uma conta para começar a registrar transações. As 40 categorias padrão em português
+            serão criadas junto.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/contas"
+            className="bg-brand text-brand-foreground hover:bg-brand/90 inline-flex items-center rounded-md px-4 py-2 text-sm font-medium"
+          >
+            Criar conta
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }
