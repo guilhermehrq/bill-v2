@@ -104,8 +104,18 @@ export async function createTransactionAction(
     return { ok: false, error: parsed.error.errors[0]?.message ?? "Dados inválidos" };
   }
 
-  const { type, accountId, categoryId, amountCents, description, date, isPaid, notes, tags } =
-    parsed.data;
+  const {
+    type,
+    accountId,
+    creditCardId,
+    categoryId,
+    amountCents,
+    description,
+    date,
+    isPaid,
+    notes,
+    tags,
+  } = parsed.data;
 
   const [row] = await db
     .insert(transactions)
@@ -115,11 +125,14 @@ export async function createTransactionAction(
       description,
       amountCents,
       date,
-      purchaseDate: date, // trigger also sets this, but providing explicitly as belt-and-suspenders
-      accountId,
+      // purchase_date is filled by trigger; the explicit value is a no-op safety net.
+      purchaseDate: date,
+      accountId: accountId ?? null,
+      creditCardId: creditCardId ?? null,
       categoryId: categoryId ?? null,
-      isPaid,
-      paidAt: isPaid ? date : null,
+      // Card transactions default to isPaid=true; they'll be reconciled when the invoice is paid.
+      isPaid: creditCardId ? true : isPaid,
+      paidAt: (creditCardId ? true : isPaid) ? date : null,
       notes: notes || null,
       tags: tags ?? [],
     })
@@ -165,9 +178,11 @@ export async function updateTransactionAction(
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
   if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
 
-  // accountId is only meaningful per-row, not mirrored
+  // accountId / creditCardId are per-row (transfers mirror the rest only).
   const perRowUpdates = { ...updates };
   if (parsed.data.accountId !== undefined) perRowUpdates.accountId = parsed.data.accountId ?? null;
+  if (parsed.data.creditCardId !== undefined)
+    perRowUpdates.creditCardId = parsed.data.creditCardId ?? null;
 
   const targetIds = existing.type === "transfer" && existing.pairId ? [id, existing.pairId] : [id];
 
@@ -208,6 +223,7 @@ export async function loadTransactionForEditAction(
       isPaid: transactions.isPaid,
       notes: transactions.notes,
       accountId: transactions.accountId,
+      creditCardId: transactions.creditCardId,
       categoryId: transactions.categoryId,
       transferPairId: transactions.transferPairId,
       transferDirection: transactions.transferDirection,
@@ -239,6 +255,7 @@ export async function loadTransactionForEditAction(
       isPaid: row.isPaid,
       notes: row.notes,
       accountId: row.accountId,
+      creditCardId: row.creditCardId,
       categoryId: row.categoryId,
       transferDirection: row.transferDirection,
       transferPairAccountId: mirrorAccountId,
@@ -255,6 +272,7 @@ export type TransactionForEdit = {
   isPaid: boolean;
   notes: string | null;
   accountId: string | null;
+  creditCardId: string | null;
   categoryId: string | null;
   transferDirection: "in" | "out" | null;
   transferPairAccountId: string | null;

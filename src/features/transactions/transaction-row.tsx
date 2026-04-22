@@ -43,6 +43,8 @@ export function TransactionRow({ transaction: t }: Props) {
       ? "Transferência"
       : "Sem categoria";
 
+  const sourceLabel = t.account?.name ?? t.card?.name ?? null;
+
   function handleTogglePaid() {
     startTransition(async () => {
       const result = await togglePaidAction(t.id, !t.isPaid);
@@ -80,14 +82,16 @@ export function TransactionRow({ transaction: t }: Props) {
       >
         <span
           className="size-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: t.category?.color ?? t.account?.color ?? "#6366f1" }}
+          style={{
+            backgroundColor: t.category?.color ?? t.account?.color ?? t.card?.color ?? "#6366f1",
+          }}
           aria-hidden
         />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{t.description}</p>
           <p className="text-muted-foreground truncate text-xs">
             {categoryLabel}
-            {t.account && ` · ${t.account.name}`}
+            {sourceLabel && ` · ${sourceLabel}`}
             {!t.isPaid && " · previsto"}
           </p>
         </div>

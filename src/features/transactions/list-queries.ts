@@ -2,12 +2,13 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
+import { accounts, categories, creditCards, transactions } from "@/db/schema";
 
 export type TransactionFilters = {
   from?: string | undefined; // YYYY-MM-DD
   to?: string | undefined;
   accountIds?: string[] | undefined;
+  cardIds?: string[] | undefined;
   categoryIds?: string[] | undefined;
   types?: ("income" | "expense" | "transfer")[] | undefined;
   search?: string | undefined;
@@ -24,6 +25,7 @@ export type TransactionListItem = {
   transferDirection: "in" | "out" | null;
   transferPairId: string | null;
   account: { id: string; name: string; color: string | null } | null;
+  card: { id: string; name: string; color: string | null } | null;
   category: { id: string; name: string; color: string | null; parentName: string | null } | null;
 };
 
@@ -44,6 +46,8 @@ export async function searchTransactions(
     clauses.push(inArray(transactions.type, filters.types));
   if (filters.accountIds && filters.accountIds.length > 0)
     clauses.push(inArray(transactions.accountId, filters.accountIds));
+  if (filters.cardIds && filters.cardIds.length > 0)
+    clauses.push(inArray(transactions.creditCardId, filters.cardIds));
   if (filters.categoryIds && filters.categoryIds.length > 0)
     clauses.push(inArray(transactions.categoryId, filters.categoryIds));
   if (filters.search && filters.search.trim().length > 0) {
@@ -77,6 +81,9 @@ export async function searchTransactions(
       accountId: accounts.id,
       accountName: accounts.name,
       accountColor: accounts.color,
+      cardId: creditCards.id,
+      cardName: creditCards.name,
+      cardColor: creditCards.color,
       categoryId: categories.id,
       categoryName: categories.name,
       categoryColor: categories.color,
@@ -84,6 +91,7 @@ export async function searchTransactions(
     })
     .from(transactions)
     .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(creditCards, eq(transactions.creditCardId, creditCards.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(parent, eq(categories.parentId, parent.id))
     .where(where)
@@ -102,6 +110,7 @@ export async function searchTransactions(
     transferDirection: r.transferDirection,
     transferPairId: r.transferPairId,
     account: r.accountId ? { id: r.accountId, name: r.accountName!, color: r.accountColor } : null,
+    card: r.cardId ? { id: r.cardId, name: r.cardName!, color: r.cardColor } : null,
     category: r.categoryId
       ? {
           id: r.categoryId,
@@ -138,6 +147,9 @@ export async function getTransactionById(
       accountId: accounts.id,
       accountName: accounts.name,
       accountColor: accounts.color,
+      cardId: creditCards.id,
+      cardName: creditCards.name,
+      cardColor: creditCards.color,
       categoryId: categories.id,
       categoryName: categories.name,
       categoryColor: categories.color,
@@ -145,6 +157,7 @@ export async function getTransactionById(
     })
     .from(transactions)
     .leftJoin(accounts, eq(transactions.accountId, accounts.id))
+    .leftJoin(creditCards, eq(transactions.creditCardId, creditCards.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(parent, eq(categories.parentId, parent.id))
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
@@ -165,6 +178,7 @@ export async function getTransactionById(
     account: row.accountId
       ? { id: row.accountId, name: row.accountName!, color: row.accountColor }
       : null,
+    card: row.cardId ? { id: row.cardId, name: row.cardName!, color: row.cardColor } : null,
     category: row.categoryId
       ? {
           id: row.categoryId,

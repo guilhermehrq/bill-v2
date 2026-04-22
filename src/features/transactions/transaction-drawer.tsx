@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -23,23 +25,42 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { toCents } from "@/lib/money";
+import type { FormCardOption } from "@/features/cards/queries";
+import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import {
   createTransactionAction,
   loadTransactionForEditAction,
   updateTransactionAction,
 } from "./actions";
-import { toReais } from "@/lib/money";
 import { useTransactionDrawer } from "./transaction-drawer-store";
 import type { FormAccountOption, FormCategoryOption, TransactionTypeValue } from "./types";
 
 type Props = {
   accounts: FormAccountOption[];
+  cards: FormCardOption[];
   categories: FormCategoryOption[];
 };
 
-export function TransactionDrawer({ accounts, categories }: Props) {
+type PaymentTarget = { kind: "account"; id: string } | { kind: "card"; id: string } | null;
+
+const ACCOUNT_PREFIX = "acc:";
+const CARD_PREFIX = "card:";
+
+function encodeTarget(t: PaymentTarget): string | undefined {
+  if (!t) return undefined;
+  return `${t.kind === "account" ? ACCOUNT_PREFIX : CARD_PREFIX}${t.id}`;
+}
+
+function decodeTarget(value: string | null): PaymentTarget {
+  if (!value) return null;
+  if (value.startsWith(ACCOUNT_PREFIX))
+    return { kind: "account", id: value.slice(ACCOUNT_PREFIX.length) };
+  if (value.startsWith(CARD_PREFIX)) return { kind: "card", id: value.slice(CARD_PREFIX.length) };
+  return null;
+}
+
+export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const { open, editingId, defaults, close } = useTransactionDrawer();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +69,9 @@ export function TransactionDrawer({ accounts, categories }: Props) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [accountId, setAccountId] = useState<string | null>(defaults.accountId ?? null);
+  const [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(
+    defaults.accountId ? { kind: "account", id: defaults.accountId } : null,
+  );
   const [destAccountId, setDestAccountId] = useState<string | null>(
     defaults.destinationAccountId ?? null,
   );
@@ -64,7 +87,13 @@ export function TransactionDrawer({ accounts, categories }: Props) {
       setAmount("");
       setDescription("");
       setCategoryId(null);
-      setAccountId(defaults.accountId ?? accounts[0]?.id ?? null);
+      setPaymentTarget(
+        defaults.accountId
+          ? { kind: "account", id: defaults.accountId }
+          : accounts[0]
+            ? { kind: "account", id: accounts[0].id }
+            : null,
+      );
       setDestAccountId(defaults.destinationAccountId ?? null);
       setDate(new Date().toISOString().slice(0, 10));
       setIsPaid(true);
@@ -86,7 +115,13 @@ export function TransactionDrawer({ accounts, categories }: Props) {
       setAmount(toReais(t.amountCents).toFixed(2).replace(".", ","));
       setDescription(t.description);
       setCategoryId(t.categoryId);
-      setAccountId(t.accountId);
+      setPaymentTarget(
+        t.accountId
+          ? { kind: "account", id: t.accountId }
+          : t.creditCardId
+            ? { kind: "card", id: t.creditCardId }
+            : null,
+      );
       setDestAccountId(t.type === "transfer" ? t.transferPairAccountId : null);
       setDate(t.date);
       setIsPaid(t.isPaid);
@@ -102,6 +137,8 @@ export function TransactionDrawer({ accounts, categories }: Props) {
     () => categories.filter((c) => c.type === type || type === "transfer"),
     [categories, type],
   );
+
+  const isCard = paymentTarget?.kind === "card";
 
   function handleSubmit() {
     setError(null);
@@ -119,16 +156,16 @@ export function TransactionDrawer({ accounts, categories }: Props) {
     }
 
     if (type === "transfer") {
-      if (!accountId || !destAccountId) {
-        setError("Informe origem e destino");
+      if (!paymentTarget || paymentTarget.kind !== "account" || !destAccountId) {
+        setError("Transferências só entre contas. Informe origem e destino.");
         return;
       }
-      if (accountId === destAccountId) {
+      if (paymentTarget.id === destAccountId) {
         setError("Origem e destino precisam ser diferentes");
         return;
       }
-    } else if (!accountId) {
-      setError("Informe a conta");
+    } else if (!paymentTarget) {
+      setError("Informe a conta ou cartão");
       return;
     }
 
@@ -138,8 +175,9 @@ export function TransactionDrawer({ accounts, categories }: Props) {
           description: description.trim(),
           amountCents,
           date,
-          categoryId: categoryId,
-          accountId: accountId,
+          categoryId,
+          accountId: paymentTarget?.kind === "account" ? paymentTarget.id : null,
+          creditCardId: paymentTarget?.kind === "card" ? paymentTarget.id : null,
           isPaid,
           notes: notes.trim() || null,
         });
@@ -155,7 +193,7 @@ export function TransactionDrawer({ accounts, categories }: Props) {
       if (type === "transfer") {
         const result = await createTransactionAction({
           type: "transfer",
-          sourceAccountId: accountId!,
+          sourceAccountId: (paymentTarget as { kind: "account"; id: string }).id,
           destinationAccountId: destAccountId!,
           description: description.trim(),
           amountCents,
@@ -174,7 +212,8 @@ export function TransactionDrawer({ accounts, categories }: Props) {
 
       const result = await createTransactionAction({
         type,
-        accountId: accountId!,
+        accountId: paymentTarget!.kind === "account" ? paymentTarget!.id : null,
+        creditCardId: paymentTarget!.kind === "card" ? paymentTarget!.id : null,
         categoryId,
         description: description.trim(),
         amountCents,
@@ -284,8 +323,8 @@ export function TransactionDrawer({ accounts, categories }: Props) {
               <div className="space-y-2">
                 <Label htmlFor="source">De (origem) *</Label>
                 <Select
-                  value={accountId ?? undefined}
-                  onValueChange={(v) => setAccountId(v)}
+                  value={paymentTarget?.kind === "account" ? paymentTarget.id : undefined}
+                  onValueChange={(v) => setPaymentTarget(v ? { kind: "account", id: v } : null)}
                   disabled={Boolean(editingId)}
                 >
                   <SelectTrigger id="source">
@@ -312,7 +351,7 @@ export function TransactionDrawer({ accounts, categories }: Props) {
                   </SelectTrigger>
                   <SelectContent>
                     {accounts
-                      .filter((a) => a.id !== accountId)
+                      .filter((a) => paymentTarget?.kind !== "account" || a.id !== paymentTarget.id)
                       .map((a) => (
                         <SelectItem key={a.id} value={a.id}>
                           {a.name}
@@ -330,19 +369,42 @@ export function TransactionDrawer({ accounts, categories }: Props) {
             </>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="account">Pagar com *</Label>
-              <Select value={accountId ?? undefined} onValueChange={(v) => setAccountId(v)}>
-                <SelectTrigger id="account">
-                  <SelectValue placeholder="Selecione a conta" />
+              <Label htmlFor="target">Pagar com *</Label>
+              <Select
+                value={encodeTarget(paymentTarget)}
+                onValueChange={(v) => setPaymentTarget(decodeTarget(v))}
+              >
+                <SelectTrigger id="target">
+                  <SelectValue placeholder="Selecione conta ou cartão" />
                 </SelectTrigger>
-                <SelectContent>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-80">
+                  {accounts.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Contas</SelectLabel>
+                      {accounts.map((a) => (
+                        <SelectItem key={a.id} value={`${ACCOUNT_PREFIX}${a.id}`}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {cards.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Cartões</SelectLabel>
+                      {cards.map((c) => (
+                        <SelectItem key={c.id} value={`${CARD_PREFIX}${c.id}`}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
+              {isCard && (
+                <p className="text-muted-foreground text-xs">
+                  A transação entrará na fatura do mês correto automaticamente.
+                </p>
+              )}
             </div>
           )}
 
@@ -351,7 +413,7 @@ export function TransactionDrawer({ accounts, categories }: Props) {
             <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
-          {type !== "transfer" && (
+          {type !== "transfer" && !isCard && (
             <div className="flex items-center gap-2">
               <Checkbox
                 id="isPaid"

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { listFormCardOptions } from "@/features/cards/queries";
 import { BottomNav } from "@/features/nav/bottom-nav";
 import { Sidebar } from "@/features/nav/sidebar";
 import { Topbar } from "@/features/nav/topbar";
@@ -17,9 +18,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const metadata = (user.user_metadata ?? {}) as { full_name?: string; avatar_url?: string };
   const name = metadata.full_name || user.email || "Usuário";
 
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, cards] = await Promise.all([
     listFormAccountOptions(user.id),
     listFormCategoryOptions(user.id),
+    listFormCardOptions(user.id),
   ]);
 
   return (
@@ -36,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto w-full max-w-6xl px-4 md:px-6">{children}</div>
       </main>
       <BottomNav />
-      <TransactionDrawer accounts={accounts} categories={categories} />
+      <TransactionDrawer accounts={accounts} cards={cards} categories={categories} />
     </div>
   );
 }

@@ -8,13 +8,19 @@ const baseFields = {
   tags: z.array(z.string().trim().min(1)).default([]),
 };
 
-export const createIncomeOrExpenseSchema = z.object({
-  type: z.enum(["income", "expense"]),
-  accountId: z.string().uuid(),
-  categoryId: z.string().uuid().nullable().optional(),
-  isPaid: z.boolean().default(true),
-  ...baseFields,
-});
+export const createIncomeOrExpenseSchema = z
+  .object({
+    type: z.enum(["income", "expense"]),
+    accountId: z.string().uuid().nullable().optional(),
+    creditCardId: z.string().uuid().nullable().optional(),
+    categoryId: z.string().uuid().nullable().optional(),
+    isPaid: z.boolean().default(true),
+    ...baseFields,
+  })
+  .refine((d) => Boolean(d.accountId) !== Boolean(d.creditCardId), {
+    message: "Escolha uma conta ou um cartão (não os dois)",
+    path: ["accountId"],
+  });
 export type CreateIncomeOrExpenseInput = z.infer<typeof createIncomeOrExpenseSchema>;
 
 export const createTransferSchema = z
@@ -40,6 +46,7 @@ export const updateTransactionSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   accountId: z.string().uuid().nullable().optional(),
+  creditCardId: z.string().uuid().nullable().optional(),
   categoryId: z.string().uuid().nullable().optional(),
   isPaid: z.boolean().optional(),
   notes: z.string().trim().nullable().optional(),
