@@ -17,7 +17,7 @@ import { creditCardInvoices } from "./credit-card-invoices";
 import { creditCards } from "./credit-cards";
 import { imports } from "./imports";
 import { recurrences } from "./recurrences";
-import { transactionType } from "./_enums";
+import { transactionType, transferDirection } from "./_enums";
 import { tenantColumns } from "./_shared";
 
 export const transactions = pgTable(
@@ -41,6 +41,7 @@ export const transactions = pgTable(
     transferPairId: uuid("transfer_pair_id").references((): AnyPgColumn => transactions.id, {
       onDelete: "set null",
     }),
+    transferDirection: transferDirection("transfer_direction"),
     isPaid: boolean("is_paid").default(true).notNull(),
     paidAt: date("paid_at"),
     invoiceId: uuid("invoice_id").references(() => creditCardInvoices.id, {
@@ -74,6 +75,11 @@ export const transactions = pgTable(
     check(
       "chk_transactions_installment_range",
       sql`${t.installmentNumber} IS NULL OR (${t.installmentNumber} BETWEEN 1 AND ${t.installmentTotal})`,
+    ),
+    check(
+      "chk_transactions_transfer_direction",
+      sql`(${t.type} = 'transfer' AND ${t.transferDirection} IS NOT NULL)
+          OR (${t.type} <> 'transfer' AND ${t.transferDirection} IS NULL)`,
     ),
     index("idx_transactions_user_date").on(t.userId, t.date.desc()),
     index("idx_transactions_user_purchase_date").on(t.userId, t.purchaseDate.desc()),

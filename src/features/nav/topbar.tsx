@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bell, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NewTransactionTrigger } from "@/features/transactions/new-transaction-trigger";
 import { UserMenu } from "./user-menu";
 
 type Props = {
@@ -35,6 +36,8 @@ export function Topbar({ user }: Props) {
       >
         <Bell className="size-4" />
       </Button>
+
+      <NewTransactionTrigger size="sm" className="hidden lg:inline-flex" />
 
       <UserMenu {...user} />
     </header>

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { BottomNav } from "@/features/nav/bottom-nav";
 import { Sidebar } from "@/features/nav/sidebar";
 import { Topbar } from "@/features/nav/topbar";
+import { listFormAccountOptions, listFormCategoryOptions } from "@/features/transactions/queries";
+import { TransactionDrawer } from "@/features/transactions/transaction-drawer";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -14,6 +16,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const metadata = (user.user_metadata ?? {}) as { full_name?: string; avatar_url?: string };
   const name = metadata.full_name || user.email || "Usuário";
+
+  const [accounts, categories] = await Promise.all([
+    listFormAccountOptions(user.id),
+    listFormCategoryOptions(user.id),
+  ]);
 
   return (
     <div className="bg-background min-h-dvh">
@@ -29,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto w-full max-w-6xl px-4 md:px-6">{children}</div>
       </main>
       <BottomNav />
+      <TransactionDrawer accounts={accounts} categories={categories} />
     </div>
   );
 }

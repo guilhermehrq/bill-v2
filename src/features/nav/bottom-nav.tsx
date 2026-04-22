@@ -1,9 +1,9 @@
 "use client";
 
-import { Menu, Plus } from "lucide-react";
+import { Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { NewTransactionTrigger } from "@/features/transactions/new-transaction-trigger";
 import { cn } from "@/lib/utils";
 import { BOTTOM_NAV_ITEMS } from "./nav-items";
 
@@ -31,15 +31,10 @@ export function BottomNav() {
       })}
 
       <div className="relative flex-1">
-        <Button
-          type="button"
-          size="icon"
-          className="bg-brand hover:bg-brand/90 text-brand-foreground absolute -top-6 left-1/2 size-12 -translate-x-1/2 rounded-full shadow-lg"
-          aria-label="Nova transação"
-          disabled
-        >
-          <Plus className="size-6" />
-        </Button>
+        <NewTransactionTrigger
+          variant="icon-fab"
+          className="absolute -top-6 left-1/2 -translate-x-1/2"
+        />
       </div>
 
       <button

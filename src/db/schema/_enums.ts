@@ -12,6 +12,8 @@ export const categoryType = pgEnum("category_type", ["income", "expense"]);
 
 export const transactionType = pgEnum("transaction_type", ["income", "expense", "transfer"]);
 
+export const transferDirection = pgEnum("transfer_direction", ["in", "out"]);
+
 export const invoiceStatus = pgEnum("invoice_status", [
   "open",
   "closed",
