@@ -1,13 +1,22 @@
-import { ComingSoon } from "@/features/nav/coming-soon";
+import { redirect } from "next/navigation";
+import { getUserSettings } from "@/features/settings/queries";
+import { SettingsForm } from "@/features/settings/settings-form";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Configurações · FinPessoal" };
 
-export default function ConfiguracoesPage() {
+export default async function ConfiguracoesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const settings = await getUserSettings(user.id);
+
   return (
-    <ComingSoon
-      title="Configurações"
-      phase={5}
-      description="Perfil, aparência, modo de exibição de cartão, exportação de dados."
-    />
+    <div className="max-w-2xl py-4">
+      <SettingsForm initial={settings} />
+    </div>
   );
 }

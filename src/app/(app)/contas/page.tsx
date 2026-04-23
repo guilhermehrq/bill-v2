@@ -1,13 +1,22 @@
-import { ComingSoon } from "@/features/nav/coming-soon";
+import { redirect } from "next/navigation";
+import { AccountsList } from "@/features/accounts/accounts-list";
+import { listAccountsWithBalances } from "@/features/accounts/queries";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Contas · FinPessoal" };
 
-export default function ContasPage() {
+export default async function ContasPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const accounts = await listAccountsWithBalances(user.id);
+
   return (
-    <ComingSoon
-      title="Contas"
-      phase={2}
-      description="CRUD de contas bancárias com saldo calculado."
-    />
+    <div className="py-4">
+      <AccountsList accounts={accounts} />
+    </div>
   );
 }
