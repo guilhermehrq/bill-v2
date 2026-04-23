@@ -26,7 +26,7 @@ import {
 import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { createAccountAction, updateAccountAction } from "./actions";
-import { createAccountSchema, type CreateAccountInput } from "./schemas";
+import { accountFormSchema, type AccountFormValues, type CreateAccountInput } from "./schemas";
 import {
   ACCOUNT_COLOR_PALETTE,
   ACCOUNT_TYPES,
@@ -51,10 +51,6 @@ type Props = {
   onSaved?: () => void;
 };
 
-type FormValues = Omit<CreateAccountInput, "initialBalanceCents"> & {
-  initialBalanceReais: string;
-};
-
 export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
   const isEdit = account != null;
   const [isPending, startTransition] = useTransition();
@@ -67,8 +63,8 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
     setValue,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(createAccountSchema) as never,
+  } = useForm<AccountFormValues>({
+    resolver: zodResolver(accountFormSchema),
     defaultValues: {
       name: "",
       type: "checking",
@@ -93,7 +89,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
     }
   }, [open, account, reset]);
 
-  function onSubmit(values: FormValues) {
+  function onSubmit(values: AccountFormValues) {
     const balance = Number.parseFloat(
       values.initialBalanceReais.replace(".", "").replace(",", "."),
     );

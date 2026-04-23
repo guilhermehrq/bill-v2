@@ -80,7 +80,7 @@ export function CategoryForm({
     reset,
     formState: { errors },
   } = useForm<CreateCategoryInput>({
-    resolver: zodResolver(createCategorySchema) as never,
+    resolver: zodResolver(createCategorySchema),
     defaultValues: {
       name: "",
       type: defaultType,
