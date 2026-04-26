@@ -18,4 +18,7 @@ export type FormCategoryOption = {
   type: "income" | "expense";
   parentName: string | null;
   color: string | null;
+  icon: string | null;
+  parentColor: string | null;
+  parentIcon: string | null;
 };

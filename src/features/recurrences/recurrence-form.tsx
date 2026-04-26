@@ -24,12 +24,21 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { CategorySelectItems, categoryItems } from "@/features/categories/category-select";
 import { createRecurrenceAction, updateRecurrenceAction } from "./actions";
 import type { RecurrenceListItem } from "./queries";
 
 type Account = { id: string; name: string };
 type Card = { id: string; name: string };
-type Category = { id: string; name: string; type: "income" | "expense"; parentName: string | null };
+type Category = {
+  id: string;
+  name: string;
+  type: "income" | "expense";
+  parentName: string | null;
+  icon?: string | null;
+  color?: string | null;
+  parentColor?: string | null;
+};
 
 type Props = {
   open: boolean;
@@ -219,24 +228,17 @@ export function RecurrenceForm({
             <Select
               value={categoryId ?? "none"}
               onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
-              items={[
-                { value: "none", label: "Sem categoria" },
-                ...filteredCategories.map((c) => ({
-                  value: c.id,
-                  label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
-                })),
-              ]}
+              items={categoryItems(filteredCategories, "none", "Sem categoria")}
             >
               <SelectTrigger id="category">
                 <SelectValue placeholder="Sem categoria" />
               </SelectTrigger>
               <SelectContent className="max-h-80">
-                <SelectItem value="none">Sem categoria</SelectItem>
-                {filteredCategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.parentName ? `${c.parentName} › ${c.name}` : c.name}
-                  </SelectItem>
-                ))}
+                <CategorySelectItems
+                  categories={filteredCategories}
+                  noneValue="none"
+                  noneLabel="Sem categoria"
+                />
               </SelectContent>
             </Select>
           </div>

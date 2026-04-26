@@ -79,7 +79,10 @@ export async function listFormCategoryOptions(userId: string): Promise<FormCateg
       name: categories.name,
       type: categories.type,
       color: categories.color,
+      icon: categories.icon,
       parentName: parent.name,
+      parentColor: parent.color,
+      parentIcon: parent.icon,
     })
     .from(categories)
     .leftJoin(parent, eq(categories.parentId, parent.id))

@@ -14,16 +14,18 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CategorySelectItems, categoryItems } from "@/features/categories/category-select";
 import { upsertBudgetAction } from "./actions";
 
-type CategoryOption = { id: string; name: string; parentName: string | null };
+type CategoryOption = {
+  id: string;
+  name: string;
+  parentName: string | null;
+  icon?: string | null;
+  color?: string | null;
+  parentColor?: string | null;
+};
 
 type ExistingBudget = {
   id: string;
@@ -104,20 +106,13 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
               value={categoryId ?? undefined}
               onValueChange={(v) => setCategoryId(v)}
               disabled={isEdit}
-              items={categoryOptions.map((c) => ({
-                value: c.id,
-                label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
-              }))}
+              items={categoryItems(categoryOptions)}
             >
               <SelectTrigger id="category">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent className="max-h-80">
-                {categoryOptions.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.parentName ? `${c.parentName} › ${c.name}` : c.name}
-                  </SelectItem>
-                ))}
+                <CategorySelectItems categories={categoryOptions} />
               </SelectContent>
             </Select>
             {isEdit && (

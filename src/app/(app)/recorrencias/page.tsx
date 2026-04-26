@@ -25,10 +25,26 @@ export default async function RecorrenciasPage() {
   const categoryOptions = categoryNodes
     .filter((n) => !n.archivedAt)
     .flatMap((n) => [
-      { id: n.id, name: n.name, type: n.type, parentName: null as string | null },
+      {
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        parentName: null as string | null,
+        icon: n.icon,
+        color: n.color,
+        parentColor: null as string | null,
+      },
       ...n.children
         .filter((c) => !c.archivedAt)
-        .map((c) => ({ id: c.id, name: c.name, type: n.type, parentName: n.name })),
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: n.type,
+          parentName: n.name,
+          icon: c.icon,
+          color: c.color,
+          parentColor: n.color,
+        })),
     ]);
 
   return (

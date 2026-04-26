@@ -58,6 +58,7 @@ export async function createRecurrenceAction(
       startDate: parsed.data.startDate,
       endDate: parsed.data.endDate ?? null,
       maxOccurrences: parsed.data.maxOccurrences ?? null,
+      lastGeneratedDate: parsed.data.lastGeneratedDate ?? null,
       active: true,
     })
     .returning({ id: recurrences.id });

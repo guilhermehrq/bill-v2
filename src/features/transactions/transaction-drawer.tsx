@@ -27,6 +27,11 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormCardOption } from "@/features/cards/queries";
+import { CategorySelectItems, categoryItems } from "@/features/categories/category-select";
+import { listOpenInvoicesAction } from "@/features/cards/invoice-actions";
+import type { InvoiceNavItem } from "@/features/cards/invoice-queries";
+import { createRecurrenceAction } from "@/features/recurrences/actions";
+import { ChevronDown, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createTransactionAction,
@@ -79,6 +84,17 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const [isPaid, setIsPaid] = useState(true);
   const [notes, setNotes] = useState("");
   const [installments, setInstallments] = useState(1);
+  const [invoiceId, setInvoiceId] = useState<string | null>(null);
+  const [openInvoices, setOpenInvoices] = useState<InvoiceNavItem[]>([]);
+
+  // Recorrência inline (apenas no modo criação, não em edição)
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatExpanded, setRepeatExpanded] = useState(false);
+  const [repeatFrequency, setRepeatFrequency] = useState<"daily" | "weekly" | "monthly" | "yearly">(
+    "monthly",
+  );
+  const [repeatInterval, setRepeatInterval] = useState(1);
+  const [repeatEndDate, setRepeatEndDate] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +116,12 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       setIsPaid(true);
       setNotes("");
       setInstallments(1);
+      setInvoiceId(null);
+      setRepeatEnabled(false);
+      setRepeatExpanded(false);
+      setRepeatFrequency("monthly");
+      setRepeatInterval(1);
+      setRepeatEndDate("");
       setError(null);
       return;
     }
@@ -141,6 +163,24 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   );
 
   const isCard = paymentTarget?.kind === "card";
+  const cardId = isCard ? paymentTarget.id : null;
+
+  useEffect(() => {
+    if (!cardId) {
+      setOpenInvoices([]);
+      setInvoiceId(null);
+      return;
+    }
+    let cancelled = false;
+    listOpenInvoicesAction(cardId).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setOpenInvoices(result.data);
+      else setOpenInvoices([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardId]);
 
   function handleSubmit() {
     setError(null);
@@ -150,7 +190,9 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       return;
     }
 
-    if (!description.trim()) {
+    const finalDescription = type === "transfer" ? "Transferência" : description.trim();
+
+    if (type !== "transfer" && !finalDescription) {
       setError("Descreva a transação");
       return;
     }
@@ -172,7 +214,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
     startTransition(async () => {
       if (editingId) {
         const result = await updateTransactionAction(editingId, {
-          description: description.trim(),
+          description: finalDescription,
           amountCents,
           date,
           categoryId,
@@ -195,7 +237,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           type: "transfer",
           sourceAccountId: (paymentTarget as { kind: "account"; id: string }).id,
           destinationAccountId: destAccountId!,
-          description: description.trim(),
+          description: finalDescription,
           amountCents,
           date,
           notes: notes.trim() || undefined,
@@ -218,7 +260,8 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         accountId: paymentTarget!.kind === "account" ? paymentTarget!.id : null,
         creditCardId: paymentTarget!.kind === "card" ? paymentTarget!.id : null,
         categoryId,
-        description: description.trim(),
+        invoiceId: paymentTarget!.kind === "card" ? invoiceId : null,
+        description: finalDescription,
         amountCents,
         date,
         isPaid,
@@ -230,9 +273,37 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         setError(result.error);
         return;
       }
-      toast.success(
-        isCardExpense ? `Parcelamento em ${installments}x registrado` : "Transação criada",
-      );
+
+      if (repeatEnabled && !isCardExpense) {
+        const [yy, mm, dd] = date.split("-").map(Number) as [number, number, number];
+        const recResult = await createRecurrenceAction({
+          description: finalDescription,
+          amountCents,
+          type,
+          categoryId,
+          accountId: paymentTarget!.kind === "account" ? paymentTarget!.id : null,
+          creditCardId: paymentTarget!.kind === "card" ? paymentTarget!.id : null,
+          frequency: repeatFrequency,
+          interval: repeatInterval,
+          dayOfMonth: repeatFrequency === "monthly" ? dd : null,
+          dayOfWeek: repeatFrequency === "weekly" ? new Date(yy, mm - 1, dd).getDay() : null,
+          startDate: date,
+          endDate: repeatEndDate || null,
+          // Mark this date as already generated so the worker creates the *next* one.
+          lastGeneratedDate: date,
+        });
+        if (!recResult.ok) {
+          // Transaction was created; surface the recurrence error but don't roll back.
+          toast.error(`Transação criada, mas a recorrência falhou: ${recResult.error}`);
+          close();
+          return;
+        }
+        toast.success("Transação criada e recorrência configurada");
+      } else {
+        toast.success(
+          isCardExpense ? `Parcelamento em ${installments}x registrado` : "Transação criada",
+        );
+      }
       close();
     });
   }
@@ -289,15 +360,17 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Descrição *</Label>
-            <Input
-              id="description"
-              placeholder="Ex: Supermercado Extra"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+          {type !== "transfer" && (
+            <div className="space-y-2">
+              <Label htmlFor="description">Descrição *</Label>
+              <Input
+                id="description"
+                placeholder="Ex: Supermercado Extra"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+          )}
 
           {type !== "transfer" && (
             <div className="space-y-2">
@@ -305,24 +378,17 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               <Select
                 value={categoryId ?? "none"}
                 onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
-                items={[
-                  { value: "none", label: "Sem categoria" },
-                  ...filteredCategories.map((c) => ({
-                    value: c.id,
-                    label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
-                  })),
-                ]}
+                items={categoryItems(filteredCategories, "none", "Sem categoria")}
               >
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Sem categoria" />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  <SelectItem value="none">Sem categoria</SelectItem>
-                  {filteredCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.parentName ? `${c.parentName} › ${c.name}` : c.name}
-                    </SelectItem>
-                  ))}
+                  <CategorySelectItems
+                    categories={filteredCategories}
+                    noneValue="none"
+                    noneLabel="Sem categoria"
+                  />
                 </SelectContent>
               </Select>
             </div>
@@ -383,7 +449,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             </>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="target">Pagar com *</Label>
+              <Label htmlFor="target">Conta/Cartão *</Label>
               <Select
                 value={encodeTarget(paymentTarget)}
                 onValueChange={(v) => setPaymentTarget(decodeTarget(v))}
@@ -430,6 +496,38 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             <Label htmlFor="date">Data *</Label>
             <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+
+          {!editingId && isCard && (
+            <div className="space-y-2">
+              <Label htmlFor="invoice">Fatura</Label>
+              <Select
+                value={invoiceId ?? "auto"}
+                onValueChange={(v) => setInvoiceId(v === "auto" ? null : v)}
+                items={[
+                  { value: "auto", label: "Automática (pela data)" },
+                  ...openInvoices.map((inv) => ({
+                    value: inv.id,
+                    label: formatInvoiceLabel(inv),
+                  })),
+                ]}
+              >
+                <SelectTrigger id="invoice">
+                  <SelectValue placeholder="Automática" />
+                </SelectTrigger>
+                <SelectContent className="max-h-80">
+                  <SelectItem value="auto">Automática (pela data)</SelectItem>
+                  {openInvoices.map((inv) => (
+                    <SelectItem key={inv.id} value={inv.id}>
+                      {formatInvoiceLabel(inv)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Em &ldquo;Automática&rdquo; o sistema escolhe a fatura pelo dia de fechamento.
+              </p>
+            </div>
+          )}
 
           {!editingId && isCard && type === "expense" && (
             <div className="space-y-2">
@@ -480,6 +578,115 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             </div>
           )}
 
+          {!editingId && type !== "transfer" && (
+            <div className="rounded-md border">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!repeatEnabled) {
+                    setRepeatEnabled(true);
+                    setRepeatExpanded(true);
+                  } else {
+                    setRepeatExpanded((v) => !v);
+                  }
+                }}
+                className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm"
+                aria-expanded={repeatExpanded}
+              >
+                <Repeat className="size-4" aria-hidden />
+                <span className="flex-1 font-medium">Repetir esta transação</span>
+                {repeatEnabled && (
+                  <span className="text-muted-foreground text-xs">
+                    {repeatFrequency === "daily"
+                      ? "diária"
+                      : repeatFrequency === "weekly"
+                        ? "semanal"
+                        : repeatFrequency === "monthly"
+                          ? "mensal"
+                          : "anual"}
+                    {repeatInterval > 1 && ` · a cada ${repeatInterval}`}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn("size-4 transition-transform", repeatExpanded && "rotate-180")}
+                  aria-hidden
+                />
+              </button>
+
+              {repeatExpanded && (
+                <div className="space-y-3 border-t p-3">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="repeat-enabled"
+                      checked={repeatEnabled}
+                      onCheckedChange={(v) => setRepeatEnabled(v === true)}
+                    />
+                    <Label htmlFor="repeat-enabled" className="text-sm font-normal">
+                      Gerar próximas ocorrências automaticamente
+                    </Label>
+                  </div>
+
+                  {repeatEnabled && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="repeat-frequency">Frequência</Label>
+                          <Select
+                            value={repeatFrequency}
+                            onValueChange={(v) => setRepeatFrequency(v as typeof repeatFrequency)}
+                            items={[
+                              { value: "daily", label: "Diária" },
+                              { value: "weekly", label: "Semanal" },
+                              { value: "monthly", label: "Mensal" },
+                              { value: "yearly", label: "Anual" },
+                            ]}
+                          >
+                            <SelectTrigger id="repeat-frequency">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="daily">Diária</SelectItem>
+                              <SelectItem value="weekly">Semanal</SelectItem>
+                              <SelectItem value="monthly">Mensal</SelectItem>
+                              <SelectItem value="yearly">Anual</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="repeat-interval">A cada</Label>
+                          <Input
+                            id="repeat-interval"
+                            type="number"
+                            min={1}
+                            max={24}
+                            value={repeatInterval}
+                            onChange={(e) =>
+                              setRepeatInterval(Math.max(1, Number(e.target.value) || 1))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="repeat-end">Termina em (opcional)</Label>
+                        <Input
+                          id="repeat-end"
+                          type="date"
+                          value={repeatEndDate}
+                          onChange={(e) => setRepeatEndDate(e.target.value)}
+                        />
+                        <p className="text-muted-foreground text-xs">
+                          Em branco = repete indefinidamente. A primeira ocorrência será a transação
+                          que você está criando agora.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="notes">Observações</Label>
             <Textarea
@@ -503,6 +710,34 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       </SheetContent>
     </Sheet>
   );
+}
+
+function formatInvoiceLabel(inv: InvoiceNavItem): string {
+  const [y, m] = inv.referenceMonth.split("-").map(Number) as [number, number, number];
+  const names = [
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez",
+  ];
+  const month = names[m - 1] ?? String(m).padStart(2, "0");
+  const statusLabel =
+    inv.status === "open"
+      ? "aberta"
+      : inv.status === "closed"
+        ? "fechada"
+        : inv.status === "partial"
+          ? "parcial"
+          : "vencida";
+  return `${month}/${String(y).slice(-2)} · ${statusLabel}`;
 }
 
 function InstallmentPreview({

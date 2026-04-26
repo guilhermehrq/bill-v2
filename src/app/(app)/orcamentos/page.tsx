@@ -32,10 +32,24 @@ export default async function OrcamentosPage({ searchParams }: { searchParams: S
   const categoryOptions = categoryNodes
     .filter((n) => n.type === "expense" && !n.archivedAt)
     .flatMap((n) => [
-      { id: n.id, name: n.name, parentName: null as string | null },
+      {
+        id: n.id,
+        name: n.name,
+        parentName: null as string | null,
+        icon: n.icon,
+        color: n.color,
+        parentColor: null as string | null,
+      },
       ...n.children
         .filter((c) => !c.archivedAt)
-        .map((c) => ({ id: c.id, name: c.name, parentName: n.name })),
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          parentName: n.name,
+          icon: c.icon,
+          color: c.color,
+          parentColor: n.color,
+        })),
     ]);
 
   const previousMonthHasData = months.includes(prev);

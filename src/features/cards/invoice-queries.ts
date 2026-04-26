@@ -184,6 +184,37 @@ export async function listInvoicesForCard(
   }));
 }
 
+// Lists invoices the user can still post transactions to: open + closed (not yet paid).
+// Sorted by reference month ascending so the soonest-to-close fatura comes first.
+export async function listOpenInvoicesForCard(
+  userId: string,
+  cardId: string,
+): Promise<InvoiceNavItem[]> {
+  const rows = await db
+    .select({
+      id: creditCardInvoices.id,
+      referenceMonth: creditCardInvoices.referenceMonth,
+      totalCents: creditCardInvoices.totalCents,
+      status: creditCardInvoices.status,
+    })
+    .from(creditCardInvoices)
+    .where(
+      and(
+        eq(creditCardInvoices.userId, userId),
+        eq(creditCardInvoices.creditCardId, cardId),
+        sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
+      ),
+    )
+    .orderBy(asc(creditCardInvoices.referenceMonth));
+
+  return rows.map((r) => ({
+    id: r.id,
+    referenceMonth: r.referenceMonth,
+    totalCents: Number(r.totalCents),
+    status: r.status,
+  }));
+}
+
 export async function getCurrentInvoiceMonth(
   userId: string,
   cardId: string,

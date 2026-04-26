@@ -109,6 +109,7 @@ export async function createTransactionAction(
     accountId,
     creditCardId,
     categoryId,
+    invoiceId,
     amountCents,
     description,
     date,
@@ -148,6 +149,8 @@ export async function createTransactionAction(
       accountId: accountId ?? null,
       creditCardId: creditCardId ?? null,
       categoryId: categoryId ?? null,
+      // When invoiceId is set, fn_assign_invoice trigger respects it (early return).
+      invoiceId: invoiceId ?? null,
       // Card transactions default to isPaid=true; they'll be reconciled when the invoice is paid.
       isPaid: creditCardId ? true : isPaid,
       paidAt: (creditCardId ? true : isPaid) ? date : null,
