@@ -55,7 +55,12 @@ export function PeriodSelector({ value }: Props) {
   }
 
   return (
-    <Select value={value} onValueChange={handleChange} disabled={isPending}>
+    <Select
+      value={value}
+      onValueChange={handleChange}
+      disabled={isPending}
+      items={ORDER.map((p) => ({ value: p, label: LABELS[p] }))}
+    >
       <SelectTrigger className="h-8 w-[180px]" aria-label="Período do relatório">
         <SelectValue />
       </SelectTrigger>

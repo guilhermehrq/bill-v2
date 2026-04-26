@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toCents, toReais } from "@/lib/money";
 import { upsertBudgetAction } from "./actions";
 
 type CategoryOption = { id: string; name: string; parentName: string | null };
@@ -45,14 +44,14 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [amountText, setAmountText] = useState("");
+  const [amountCents, setAmountCents] = useState(0);
 
   const isEdit = existing != null;
 
   useEffect(() => {
     if (!open) return;
     setCategoryId(existing?.categoryId ?? categoryOptions[0]?.id ?? null);
-    setAmountText(existing ? toReais(existing.amountCents).toFixed(2).replace(".", ",") : "");
+    setAmountCents(existing?.amountCents ?? 0);
     setError(null);
   }, [open, existing, categoryOptions]);
 
@@ -62,8 +61,7 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
       setError("Escolha uma categoria");
       return;
     }
-    const parsed = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (amountCents <= 0) {
       setError("Valor precisa ser maior que zero");
       return;
     }
@@ -72,7 +70,7 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
       const result = await upsertBudgetAction({
         categoryId,
         month,
-        amountCents: toCents(parsed),
+        amountCents,
       });
       if (!result.ok) {
         setError(result.error);
@@ -106,6 +104,10 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
               value={categoryId ?? undefined}
               onValueChange={(v) => setCategoryId(v)}
               disabled={isEdit}
+              items={categoryOptions.map((c) => ({
+                value: c.id,
+                label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
+              }))}
             >
               <SelectTrigger id="category">
                 <SelectValue placeholder="Selecione" />
@@ -126,15 +128,8 @@ export function BudgetForm({ open, onOpenChange, month, existing, categoryOption
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Limite (R$)</Label>
-            <Input
-              id="amount"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              className="tabular"
-            />
+            <Label htmlFor="amount">Limite</Label>
+            <MoneyInput id="amount" valueCents={amountCents} onChange={setAmountCents} />
           </div>
         </div>
 

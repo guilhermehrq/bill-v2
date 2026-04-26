@@ -80,7 +80,11 @@ export function MergeDialog({ open, onOpenChange, source, candidates }: Props) {
 
         <div className="space-y-2">
           <Label htmlFor="target">Mover para</Label>
-          <Select value={targetId ?? undefined} onValueChange={setTargetId}>
+          <Select
+            value={targetId ?? undefined}
+            onValueChange={setTargetId}
+            items={targets.map((c) => ({ value: c.id, label: c.name }))}
+          >
             <SelectTrigger id="target">
               <SelectValue placeholder="Selecione a categoria destino" />
             </SelectTrigger>

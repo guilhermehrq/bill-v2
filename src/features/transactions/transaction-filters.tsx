@@ -110,7 +110,14 @@ export function TransactionFilters({ accounts, categories }: Props) {
           </Button>
         </div>
 
-        <Select value={accountId} onValueChange={(v) => pushParams({ account: v })}>
+        <Select
+          value={accountId}
+          onValueChange={(v) => pushParams({ account: v })}
+          items={[
+            { value: "all", label: "Todas contas" },
+            ...accounts.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+        >
           <SelectTrigger size="sm" className="w-[160px]">
             <SelectValue />
           </SelectTrigger>
@@ -124,7 +131,14 @@ export function TransactionFilters({ accounts, categories }: Props) {
           </SelectContent>
         </Select>
 
-        <Select value={categoryId} onValueChange={(v) => pushParams({ category: v })}>
+        <Select
+          value={categoryId}
+          onValueChange={(v) => pushParams({ category: v })}
+          items={[
+            { value: "all", label: "Todas categorias" },
+            ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
+          ]}
+        >
           <SelectTrigger size="sm" className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
@@ -138,7 +152,16 @@ export function TransactionFilters({ accounts, categories }: Props) {
           </SelectContent>
         </Select>
 
-        <Select value={type} onValueChange={(v) => pushParams({ type: v })}>
+        <Select
+          value={type}
+          onValueChange={(v) => pushParams({ type: v })}
+          items={[
+            { value: "all", label: "Todos tipos" },
+            { value: "income", label: "Receitas" },
+            { value: "expense", label: "Despesas" },
+            { value: "transfer", label: "Transferências" },
+          ]}
+        >
           <SelectTrigger size="sm" className="w-[140px]">
             <SelectValue />
           </SelectTrigger>

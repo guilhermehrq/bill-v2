@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { createCardAction, updateCardAction } from "./actions";
 import { CARD_BRANDS, CARD_COLOR_PALETTE, DEFAULT_CARD_COLOR } from "./types";
@@ -56,7 +56,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
   const [name, setName] = useState("");
   const [brand, setBrand] = useState<string>("");
   const [lastDigits, setLastDigits] = useState("");
-  const [limitReais, setLimitReais] = useState("0");
+  const [limitCents, setLimitCents] = useState(0);
   const [closingDay, setClosingDay] = useState<number>(1);
   const [dueDay, setDueDay] = useState<number>(10);
   const [defaultAccountId, setDefaultAccountId] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
       setName(card.name);
       setBrand(card.brand ?? "");
       setLastDigits(card.lastDigits ?? "");
-      setLimitReais(toReais(card.limitCents).toFixed(2).replace(".", ","));
+      setLimitCents(card.limitCents);
       setClosingDay(card.closingDay);
       setDueDay(card.dueDay);
       setDefaultAccountId(card.defaultAccountId);
@@ -77,7 +77,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
       setName("");
       setBrand("");
       setLastDigits("");
-      setLimitReais("0");
+      setLimitCents(0);
       setClosingDay(1);
       setDueDay(10);
       setDefaultAccountId(accounts[0]?.id ?? null);
@@ -88,8 +88,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
 
   function handleSubmit() {
     setError(null);
-    const parsed = Number.parseFloat(limitReais.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed < 0) {
+    if (limitCents < 0) {
       setError("Limite inválido");
       return;
     }
@@ -102,7 +101,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
       name: name.trim(),
       brand: brand || undefined,
       lastDigits: lastDigits || undefined,
-      limitCents: toCents(parsed),
+      limitCents,
       closingDay,
       dueDay,
       defaultAccountId,
@@ -153,7 +152,11 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="brand">Bandeira</Label>
-              <Select value={brand} onValueChange={(v) => setBrand(v ?? "")}>
+              <Select
+                value={brand}
+                onValueChange={(v) => setBrand(v ?? "")}
+                items={CARD_BRANDS.map((b) => ({ value: b.value, label: b.label }))}
+              >
                 <SelectTrigger id="brand">
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
@@ -179,14 +182,8 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="limit">Limite (R$)</Label>
-            <Input
-              id="limit"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={limitReais}
-              onChange={(e) => setLimitReais(e.target.value)}
-            />
+            <Label htmlFor="limit">Limite</Label>
+            <MoneyInput id="limit" valueCents={limitCents} onChange={setLimitCents} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -220,6 +217,10 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
               <Select
                 value={defaultAccountId ?? "none"}
                 onValueChange={(v) => setDefaultAccountId(v === "none" ? null : v)}
+                items={[
+                  { value: "none", label: "Selecionar no pagamento" },
+                  ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                ]}
               >
                 <SelectTrigger id="defaultAccount">
                   <SelectValue placeholder="Selecionar no pagamento" />

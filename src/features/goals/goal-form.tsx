@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { createGoalAction, updateGoalAction } from "./actions";
 import type { GoalRow } from "./queries";
@@ -51,7 +51,7 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [targetText, setTargetText] = useState("");
+  const [targetCents, setTargetCents] = useState(0);
   const [targetDate, setTargetDate] = useState<string>("");
   const [accountId, setAccountId] = useState<string | null>(null);
   const [color, setColor] = useState<string>(PALETTE[0]!);
@@ -60,13 +60,13 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
     if (!open) return;
     if (goal) {
       setName(goal.name);
-      setTargetText(toReais(goal.targetCents).toFixed(2).replace(".", ","));
+      setTargetCents(goal.targetCents);
       setTargetDate(goal.targetDate ?? "");
       setAccountId(goal.accountId);
       setColor(goal.color ?? PALETTE[0]!);
     } else {
       setName("");
-      setTargetText("");
+      setTargetCents(0);
       setTargetDate("");
       setAccountId(null);
       setColor(PALETTE[0]!);
@@ -76,8 +76,7 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
 
   function handleSubmit() {
     setError(null);
-    const parsed = Number.parseFloat(targetText.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (targetCents <= 0) {
       setError("Valor alvo inválido");
       return;
     }
@@ -88,7 +87,7 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
 
     const payload = {
       name: name.trim(),
-      targetCents: toCents(parsed),
+      targetCents,
       targetDate: targetDate || null,
       accountId,
       color,
@@ -136,15 +135,8 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="target">Valor alvo (R$)</Label>
-            <Input
-              id="target"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={targetText}
-              onChange={(e) => setTargetText(e.target.value)}
-              className="tabular"
-            />
+            <Label htmlFor="target">Valor alvo</Label>
+            <MoneyInput id="target" valueCents={targetCents} onChange={setTargetCents} />
           </div>
 
           <div className="space-y-2">
@@ -163,6 +155,10 @@ export function GoalForm({ open, onOpenChange, goal, accounts }: Props) {
               <Select
                 value={accountId ?? "none"}
                 onValueChange={(v) => setAccountId(v === "none" ? null : v)}
+                items={[
+                  { value: "none", label: "Nenhuma — aportes manuais" },
+                  ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                ]}
               >
                 <SelectTrigger id="account">
                   <SelectValue placeholder="Nenhuma (aportes manuais)" />

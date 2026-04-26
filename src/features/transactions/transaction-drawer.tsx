@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,6 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormCardOption } from "@/features/cards/queries";
-import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import {
   createTransactionAction,
@@ -66,7 +66,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const [type, setType] = useState<TransactionTypeValue>(defaults.type ?? "expense");
-  const [amount, setAmount] = useState("");
+  const [amountCents, setAmountCents] = useState(0);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(
@@ -85,7 +85,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
     if (!editingId) {
       setType(defaults.type ?? "expense");
-      setAmount("");
+      setAmountCents(0);
       setDescription("");
       setCategoryId(null);
       setPaymentTarget(
@@ -114,7 +114,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       }
       const t = result.data;
       setType(t.type);
-      setAmount(toReais(t.amountCents).toFixed(2).replace(".", ","));
+      setAmountCents(t.amountCents);
       setDescription(t.description);
       setCategoryId(t.categoryId);
       setPaymentTarget(
@@ -145,12 +145,10 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   function handleSubmit() {
     setError(null);
 
-    const parsed = Number.parseFloat(amount.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (amountCents <= 0) {
       setError("Valor precisa ser maior que zero");
       return;
     }
-    const amountCents = toCents(parsed);
 
     if (!description.trim()) {
       setError("Descreva a transação");
@@ -282,16 +280,13 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
           <div className="space-y-2">
             <Label htmlFor="amount">Valor *</Label>
-            <Input
+            <MoneyInput
               id="amount"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="tabular text-2xl"
+              valueCents={amountCents}
+              onChange={setAmountCents}
+              className="text-2xl"
               autoFocus
             />
-            <p className="text-muted-foreground text-xs">Use vírgula para centavos.</p>
           </div>
 
           <div className="space-y-2">
@@ -310,6 +305,13 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               <Select
                 value={categoryId ?? "none"}
                 onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
+                items={[
+                  { value: "none", label: "Sem categoria" },
+                  ...filteredCategories.map((c) => ({
+                    value: c.id,
+                    label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
+                  })),
+                ]}
               >
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Sem categoria" />
@@ -334,6 +336,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
                   value={paymentTarget?.kind === "account" ? paymentTarget.id : undefined}
                   onValueChange={(v) => setPaymentTarget(v ? { kind: "account", id: v } : null)}
                   disabled={Boolean(editingId)}
+                  items={accounts.map((a) => ({ value: a.id, label: a.name }))}
                 >
                   <SelectTrigger id="source">
                     <SelectValue placeholder="Selecione a conta de origem" />
@@ -353,6 +356,9 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
                   value={destAccountId ?? undefined}
                   onValueChange={(v) => setDestAccountId(v)}
                   disabled={Boolean(editingId)}
+                  items={accounts
+                    .filter((a) => paymentTarget?.kind !== "account" || a.id !== paymentTarget.id)
+                    .map((a) => ({ value: a.id, label: a.name }))}
                 >
                   <SelectTrigger id="destination">
                     <SelectValue placeholder="Selecione a conta de destino" />
@@ -381,6 +387,10 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               <Select
                 value={encodeTarget(paymentTarget)}
                 onValueChange={(v) => setPaymentTarget(decodeTarget(v))}
+                items={[
+                  ...accounts.map((a) => ({ value: `${ACCOUNT_PREFIX}${a.id}`, label: a.name })),
+                  ...cards.map((c) => ({ value: `${CARD_PREFIX}${c.id}`, label: c.name })),
+                ]}
               >
                 <SelectTrigger id="target">
                   <SelectValue placeholder="Selecione conta ou cartão" />
@@ -427,6 +437,13 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               <Select
                 value={String(installments)}
                 onValueChange={(v) => setInstallments(Number(v))}
+                items={[
+                  { value: "1", label: "À vista" },
+                  ...Array.from({ length: 23 }, (_, i) => i + 2).map((n) => ({
+                    value: String(n),
+                    label: `${n}x`,
+                  })),
+                ]}
               >
                 <SelectTrigger id="installments">
                   <SelectValue />
@@ -443,7 +460,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               {installments > 1 && (
                 <InstallmentPreview
                   installments={installments}
-                  amountText={amount}
+                  amountCents={amountCents}
                   startDate={date}
                 />
               )}
@@ -490,22 +507,21 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
 function InstallmentPreview({
   installments,
-  amountText,
+  amountCents,
   startDate,
 }: {
   installments: number;
-  amountText: string;
+  amountCents: number;
   startDate: string;
 }) {
-  const amount = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (amountCents <= 0) {
     return (
       <p className="text-muted-foreground text-xs">
         {installments}x — preencha o valor para ver a prévia.
       </p>
     );
   }
-  const totalCents = toCents(amount);
+  const totalCents = amountCents;
   const base = Math.floor(totalCents / installments);
   const remainder = totalCents - base * installments;
   const firstCents = remainder > 0 ? base + 1 : base;

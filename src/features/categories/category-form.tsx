@@ -155,6 +155,10 @@ export function CategoryForm({
               <Select
                 value={selectedType}
                 onValueChange={(v) => setValue("type", v as "income" | "expense")}
+                items={[
+                  { value: "expense", label: "Despesa" },
+                  { value: "income", label: "Receita" },
+                ]}
               >
                 <SelectTrigger id="type">
                   <SelectValue />
@@ -173,6 +177,10 @@ export function CategoryForm({
               <Select
                 value={selectedParent ?? "none"}
                 onValueChange={(v) => setValue("parentId", v === "none" ? null : v)}
+                items={[
+                  { value: "none", label: "Nenhuma — categoria raiz" },
+                  ...availableParents.map((p) => ({ value: p.id, label: p.name })),
+                ]}
               >
                 <SelectTrigger id="parent">
                   <SelectValue placeholder="Nenhuma — categoria raiz" />

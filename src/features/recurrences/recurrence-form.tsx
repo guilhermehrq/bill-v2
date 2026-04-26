@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -23,7 +24,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { toCents, toReais } from "@/lib/money";
 import { createRecurrenceAction, updateRecurrenceAction } from "./actions";
 import type { RecurrenceListItem } from "./queries";
 
@@ -63,7 +63,7 @@ export function RecurrenceForm({
   const [error, setError] = useState<string | null>(null);
 
   const [description, setDescription] = useState("");
-  const [amountText, setAmountText] = useState("");
+  const [amountCents, setAmountCents] = useState(0);
   const [type, setType] = useState<"income" | "expense">("expense");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paymentValue, setPaymentValue] = useState<string>("");
@@ -78,7 +78,7 @@ export function RecurrenceForm({
     if (!open) return;
     if (existing) {
       setDescription(existing.description);
-      setAmountText(toReais(existing.amountCents).toFixed(2).replace(".", ","));
+      setAmountCents(existing.amountCents);
       setType(existing.type);
       setCategoryId(existing.categoryId);
       setPaymentValue(
@@ -96,7 +96,7 @@ export function RecurrenceForm({
       setEndDate(existing.endDate ?? "");
     } else {
       setDescription("");
-      setAmountText("");
+      setAmountCents(0);
       setType("expense");
       setCategoryId(null);
       setPaymentValue(accounts[0] ? `acc:${accounts[0].id}` : "");
@@ -114,8 +114,7 @@ export function RecurrenceForm({
 
   function handleSubmit() {
     setError(null);
-    const parsedAmount = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (amountCents <= 0) {
       setError("Valor precisa ser maior que zero");
       return;
     }
@@ -135,7 +134,7 @@ export function RecurrenceForm({
 
     const payload = {
       description: description.trim(),
-      amountCents: toCents(parsedAmount),
+      amountCents,
       type,
       categoryId,
       accountId: kind === "acc" ? id : null,
@@ -212,14 +211,7 @@ export function RecurrenceForm({
 
           <div className="space-y-2">
             <Label htmlFor="amount">Valor</Label>
-            <Input
-              id="amount"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              className="tabular"
-            />
+            <MoneyInput id="amount" valueCents={amountCents} onChange={setAmountCents} />
           </div>
 
           <div className="space-y-2">
@@ -227,6 +219,13 @@ export function RecurrenceForm({
             <Select
               value={categoryId ?? "none"}
               onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
+              items={[
+                { value: "none", label: "Sem categoria" },
+                ...filteredCategories.map((c) => ({
+                  value: c.id,
+                  label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
+                })),
+              ]}
             >
               <SelectTrigger id="category">
                 <SelectValue placeholder="Sem categoria" />
@@ -244,7 +243,14 @@ export function RecurrenceForm({
 
           <div className="space-y-2">
             <Label htmlFor="payment">Pagar com</Label>
-            <Select value={paymentValue} onValueChange={(v) => setPaymentValue(v ?? "")}>
+            <Select
+              value={paymentValue}
+              onValueChange={(v) => setPaymentValue(v ?? "")}
+              items={[
+                ...accounts.map((a) => ({ value: `acc:${a.id}`, label: a.name })),
+                ...cards.map((c) => ({ value: `card:${c.id}`, label: c.name })),
+              ]}
+            >
               <SelectTrigger id="payment">
                 <SelectValue placeholder="Conta ou cartão" />
               </SelectTrigger>
@@ -276,7 +282,16 @@ export function RecurrenceForm({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="frequency">Frequência</Label>
-              <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+              <Select
+                value={frequency}
+                onValueChange={(v) => setFrequency(v as typeof frequency)}
+                items={[
+                  { value: "daily", label: "Diária" },
+                  { value: "weekly", label: "Semanal" },
+                  { value: "monthly", label: "Mensal" },
+                  { value: "yearly", label: "Anual" },
+                ]}
+              >
                 <SelectTrigger id="frequency">
                   <SelectValue />
                 </SelectTrigger>
@@ -321,6 +336,7 @@ export function RecurrenceForm({
               <Select
                 value={dayOfWeek !== null ? String(dayOfWeek) : undefined}
                 onValueChange={(v) => setDayOfWeek(v !== null ? Number(v) : null)}
+                items={WEEKDAYS.map((d) => ({ value: String(d.value), label: d.label }))}
               >
                 <SelectTrigger id="dayOfWeek">
                   <SelectValue placeholder="Dia da semana" />

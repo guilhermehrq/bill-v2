@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toCents, toReais, format } from "@/lib/money";
+import { format } from "@/lib/money";
 import { payInvoiceAction } from "./invoice-actions";
 
 type Props = {
@@ -48,7 +49,7 @@ export function PayInvoiceDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
-  const [amountText, setAmountText] = useState("");
+  const [amountCents, setAmountCents] = useState(0);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const remainingCents = totalCents - paidCents;
@@ -56,15 +57,14 @@ export function PayInvoiceDialog({
   useEffect(() => {
     if (!open) return;
     setAccountId(defaultAccountId ?? accounts[0]?.id ?? null);
-    setAmountText(toReais(remainingCents).toFixed(2).replace(".", ","));
+    setAmountCents(remainingCents);
     setDate(dueDate);
     setError(null);
   }, [open, defaultAccountId, accounts, remainingCents, dueDate]);
 
   function handleSubmit() {
     setError(null);
-    const parsed = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (amountCents <= 0) {
       setError("Valor inválido");
       return;
     }
@@ -72,7 +72,6 @@ export function PayInvoiceDialog({
       setError("Escolha a conta de débito");
       return;
     }
-    const amountCents = toCents(parsed);
     if (amountCents > remainingCents) {
       setError("Valor maior que o saldo devedor");
       return;
@@ -118,7 +117,11 @@ export function PayInvoiceDialog({
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="account">Pagar com</Label>
-            <Select value={accountId ?? undefined} onValueChange={(v) => setAccountId(v)}>
+            <Select
+              value={accountId ?? undefined}
+              onValueChange={(v) => setAccountId(v)}
+              items={accounts.map((a) => ({ value: a.id, label: a.name }))}
+            >
               <SelectTrigger id="account">
                 <SelectValue placeholder="Selecione a conta" />
               </SelectTrigger>
@@ -134,13 +137,7 @@ export function PayInvoiceDialog({
 
           <div className="space-y-2">
             <Label htmlFor="amount">Valor</Label>
-            <Input
-              id="amount"
-              inputMode="decimal"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              className="tabular"
-            />
+            <MoneyInput id="amount" valueCents={amountCents} onChange={setAmountCents} />
             <p className="text-muted-foreground text-xs">
               Digite um valor menor para pagamento parcial.
             </p>

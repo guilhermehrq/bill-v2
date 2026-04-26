@@ -12,9 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toCents } from "@/lib/money";
+import { MoneyInput } from "@/components/ui/money-input";
 import { contributeGoalAction } from "./actions";
 
 type Props = {
@@ -27,25 +26,24 @@ type Props = {
 export function ContributeDialog({ open, onOpenChange, goalId, goalName }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [amountText, setAmountText] = useState("");
+  const [amountCents, setAmountCents] = useState(0);
 
   useEffect(() => {
     if (!open) return;
-    setAmountText("");
+    setAmountCents(0);
     setError(null);
   }, [open]);
 
   function handleSubmit() {
     setError(null);
-    const parsed = Number.parseFloat(amountText.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (amountCents <= 0) {
       setError("Valor precisa ser maior que zero");
       return;
     }
     if (!goalId) return;
 
     startTransition(async () => {
-      const result = await contributeGoalAction({ goalId, amountCents: toCents(parsed) });
+      const result = await contributeGoalAction({ goalId, amountCents });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -73,15 +71,7 @@ export function ContributeDialog({ open, onOpenChange, goalId, goalName }: Props
 
         <div className="space-y-2">
           <Label htmlFor="amount">Valor</Label>
-          <Input
-            id="amount"
-            inputMode="decimal"
-            placeholder="0,00"
-            value={amountText}
-            onChange={(e) => setAmountText(e.target.value)}
-            className="tabular"
-            autoFocus
-          />
+          <MoneyInput id="amount" valueCents={amountCents} onChange={setAmountCents} autoFocus />
         </div>
 
         <DialogFooter>

@@ -82,6 +82,11 @@ export function SettingsForm({ initial }: Props) {
           <Select
             value={creditCardReportMode}
             onValueChange={(v) => setCreditCardReportMode(v as CreditCardReportMode)}
+            items={(
+              Object.entries(CREDIT_CARD_MODE_LABELS) as Array<
+                [CreditCardReportMode, (typeof CREDIT_CARD_MODE_LABELS)[CreditCardReportMode]]
+              >
+            ).map(([value, info]) => ({ value, label: info.label }))}
           >
             <SelectTrigger id="cc-mode">
               <SelectValue />
@@ -110,7 +115,15 @@ export function SettingsForm({ initial }: Props) {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="theme">Tema</Label>
-            <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+            <Select
+              value={theme}
+              onValueChange={(v) => setTheme(v as Theme)}
+              items={[
+                { value: "system", label: "Sistema (automático)" },
+                { value: "light", label: "Claro" },
+                { value: "dark", label: "Escuro" },
+              ]}
+            >
               <SelectTrigger id="theme">
                 <SelectValue />
               </SelectTrigger>
@@ -127,7 +140,14 @@ export function SettingsForm({ initial }: Props) {
 
           <div className="space-y-2">
             <Label htmlFor="density">Densidade</Label>
-            <Select value={density} onValueChange={(v) => setDensity(v as Density)}>
+            <Select
+              value={density}
+              onValueChange={(v) => setDensity(v as Density)}
+              items={[
+                { value: "comfortable", label: "Confortável" },
+                { value: "compact", label: "Compacta" },
+              ]}
+            >
               <SelectTrigger id="density">
                 <SelectValue />
               </SelectTrigger>

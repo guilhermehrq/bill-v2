@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
@@ -23,7 +24,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { toCents, toReais } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { createAccountAction, updateAccountAction } from "./actions";
 import { accountFormSchema, type AccountFormValues, type CreateAccountInput } from "./schemas";
@@ -69,7 +69,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
       name: "",
       type: "checking",
       institution: "",
-      initialBalanceReais: "0",
+      initialBalanceCents: 0,
       color: DEFAULT_ACCOUNT_COLOR,
       icon: DEFAULT_ACCOUNT_ICON,
     },
@@ -81,7 +81,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
         name: account?.name ?? "",
         type: (account?.type ?? "checking") as CreateAccountInput["type"],
         institution: account?.institution ?? "",
-        initialBalanceReais: String(toReais(account?.initialBalanceCents ?? 0)).replace(".", ","),
+        initialBalanceCents: account?.initialBalanceCents ?? 0,
         color: account?.color ?? DEFAULT_ACCOUNT_COLOR,
         icon: account?.icon ?? DEFAULT_ACCOUNT_ICON,
       });
@@ -90,19 +90,11 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
   }, [open, account, reset]);
 
   function onSubmit(values: AccountFormValues) {
-    const balance = Number.parseFloat(
-      values.initialBalanceReais.replace(".", "").replace(",", "."),
-    );
-    if (!Number.isFinite(balance)) {
-      setFormError("Saldo inicial inválido");
-      return;
-    }
-
     const payload: CreateAccountInput = {
       name: values.name,
       type: values.type,
       institution: values.institution || undefined,
-      initialBalanceCents: toCents(balance),
+      initialBalanceCents: values.initialBalanceCents,
       color: values.color,
       icon: values.icon,
     };
@@ -154,6 +146,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
             <Select
               value={watch("type")}
               onValueChange={(v) => setValue("type", v as CreateAccountInput["type"])}
+              items={ACCOUNT_TYPES.map((t) => ({ value: t.value, label: t.label }))}
             >
               <SelectTrigger id="type">
                 <SelectValue />
@@ -178,16 +171,14 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="initialBalanceReais">Saldo inicial (R$)</Label>
-            <Input
-              id="initialBalanceReais"
-              inputMode="decimal"
-              placeholder="0,00"
-              {...register("initialBalanceReais")}
+            <Label htmlFor="initialBalance">Saldo inicial</Label>
+            <MoneyInput
+              id="initialBalance"
+              valueCents={watch("initialBalanceCents")}
+              onChange={(cents) => setValue("initialBalanceCents", cents)}
+              allowNegative
             />
-            <p className="text-muted-foreground text-xs">
-              Use vírgula para centavos. Pode ser negativo.
-            </p>
+            <p className="text-muted-foreground text-xs">Pode ser negativo.</p>
           </div>
 
           <div className="space-y-2">
