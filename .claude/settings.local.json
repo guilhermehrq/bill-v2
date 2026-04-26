@@ -1,5 +1,18 @@
 {
   "permissions": {
-    "allow": ["Bash(git config *)", "Read(//home/jamal/.ssh/**)"]
+    "allow": [
+      "Bash(git config *)",
+      "Read(//home/jamal/.ssh/**)",
+      "Bash(xargs ls *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm lint *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm dev *)",
+      "Bash(curl -sS -o /tmp/relatorios.html -w \"HTTP %{http_code}\\\\nLOCATION %{redirect_url}\\\\nSIZE %{size_download}\\\\n\" http://localhost:3000/relatorios)",
+      "Read(//tmp/**)",
+      "Bash(curl -sS -o /tmp/login.html -w \"HTTP %{http_code}\\\\nSIZE %{size_download}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -sS http://localhost:3000/relatorios -L -o /dev/null -w \"HTTP %{http_code} \\(%{num_redirects} redirects\\)\\\\n\")"
+    ]
   }
 }

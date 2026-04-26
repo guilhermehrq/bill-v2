@@ -52,7 +52,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Insights",
     items: [
-      { title: "Relatórios", href: "/relatorios", icon: BarChart3, phase: 5 },
+      { title: "Relatórios", href: "/relatorios", icon: BarChart3 },
       { title: "Importar", href: "/importar", icon: Download, phase: 2.5 },
     ],
   },

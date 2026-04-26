@@ -121,7 +121,7 @@ export function SettingsForm({ initial }: Props) {
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              A aplicação completa do tema segue na Fase 5 (polish).
+              &quot;Sistema&quot; segue a preferência do seu dispositivo.
             </p>
           </div>
 

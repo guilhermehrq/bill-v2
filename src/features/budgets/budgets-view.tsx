@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CreditCardModeSelector } from "@/features/settings/credit-card-mode-selector";
+import type { CreditCardReportMode } from "@/features/settings/queries";
 import { copyBudgetsFromMonthAction } from "./actions";
 import { BudgetForm } from "./budget-form";
 import { BudgetProgressRow } from "./budget-progress-row";
@@ -16,7 +18,7 @@ type Props = {
   categoryOptions: Array<{ id: string; name: string; parentName: string | null }>;
   previousMonth: string;
   previousMonthHasData: boolean;
-  creditCardModeShort: string;
+  creditCardMode: CreditCardReportMode;
 };
 
 export function BudgetsView({
@@ -24,7 +26,7 @@ export function BudgetsView({
   categoryOptions,
   previousMonth,
   previousMonthHasData,
-  creditCardModeShort,
+  creditCardMode,
 }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetRow | null>(null);
@@ -72,13 +74,13 @@ export function BudgetsView({
         <div>
           <h1 className="text-2xl font-semibold">Orçamentos — {monthLabel}</h1>
           <p className="text-muted-foreground text-sm">
-            Cartão: {creditCardModeShort} ·{" "}
             {overview.daysElapsed >= overview.daysInMonth
               ? "mês encerrado"
               : `${daysLeft} ${daysLeft === 1 ? "dia restante" : "dias restantes"}`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <CreditCardModeSelector currentMode={creditCardMode} />
           {previousMonthHasData && (
             <Button variant="outline" onClick={handleCopy} disabled={isCopying}>
               <Copy className="mr-2 size-4" />

@@ -1,4 +1,3 @@
-import { Info } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +6,8 @@ import { CategoryDonut } from "@/features/dashboard/category-donut";
 import { KpiCard } from "@/features/dashboard/kpi-card";
 import { loadDashboard } from "@/features/dashboard/queries";
 import { UpcomingList } from "@/features/dashboard/upcoming-list";
-import { CREDIT_CARD_MODE_LABELS, getUserSettings } from "@/features/settings/queries";
+import { CreditCardModeSelector } from "@/features/settings/credit-card-mode-selector";
+import { getUserSettings } from "@/features/settings/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Dashboard · FinPessoal" };
@@ -26,7 +26,6 @@ export default async function HomePage() {
 
   const settings = await getUserSettings(user.id);
   const data = await loadDashboard(user.id, settings.creditCardReportMode);
-  const modeInfo = CREDIT_CARD_MODE_LABELS[settings.creditCardReportMode];
 
   const incomeDelta = data.currentMonth.incomeCents - data.previousMonth.incomeCents;
   const expenseDelta = data.currentMonth.expenseCents - data.previousMonth.expenseCents;
@@ -42,14 +41,7 @@ export default async function HomePage() {
           <h1 className="text-2xl font-semibold">Olá, {displayName} 👋</h1>
           <p className="text-muted-foreground text-sm">Visão geral do mês atual.</p>
         </div>
-        <Link
-          href="/configuracoes"
-          className="text-muted-foreground hover:bg-accent hover:text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-          title={modeInfo.description}
-        >
-          <Info className="size-3" />
-          Cartão: {modeInfo.short}
-        </Link>
+        <CreditCardModeSelector currentMode={settings.creditCardReportMode} />
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

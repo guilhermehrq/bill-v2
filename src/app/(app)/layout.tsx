@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 import { listFormCardOptions } from "@/features/cards/queries";
 import { BottomNav } from "@/features/nav/bottom-nav";
+import { KeyboardShortcuts } from "@/features/nav/keyboard-shortcuts";
 import { Sidebar } from "@/features/nav/sidebar";
 import { Topbar } from "@/features/nav/topbar";
+import { getUserSettings } from "@/features/settings/queries";
+import { ThemeApplier } from "@/features/settings/theme-applier";
 import { listFormAccountOptions, listFormCategoryOptions } from "@/features/transactions/queries";
 import { TransactionDrawer } from "@/features/transactions/transaction-drawer";
 import { createClient } from "@/lib/supabase/server";
@@ -18,10 +21,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const metadata = (user.user_metadata ?? {}) as { full_name?: string; avatar_url?: string };
   const name = metadata.full_name || user.email || "Usuário";
 
-  const [accounts, categories, cards] = await Promise.all([
+  const [accounts, categories, cards, settings] = await Promise.all([
     listFormAccountOptions(user.id),
     listFormCategoryOptions(user.id),
     listFormCardOptions(user.id),
+    getUserSettings(user.id),
   ]);
 
   return (
@@ -39,6 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </main>
       <BottomNav />
       <TransactionDrawer accounts={accounts} cards={cards} categories={categories} />
+      <ThemeApplier theme={settings.theme} />
+      <KeyboardShortcuts />
     </div>
   );
 }
