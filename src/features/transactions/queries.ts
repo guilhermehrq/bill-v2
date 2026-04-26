@@ -1,6 +1,6 @@
 import "server-only";
 import { alias } from "drizzle-orm/pg-core";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
 import type { FormAccountOption, FormCategoryOption } from "./types";
@@ -83,7 +83,7 @@ export async function listFormCategoryOptions(userId: string): Promise<FormCateg
     })
     .from(categories)
     .leftJoin(parent, eq(categories.parentId, parent.id))
-    .where(eq(categories.userId, userId))
+    .where(and(eq(categories.userId, userId), isNull(categories.archivedAt)))
     .orderBy(categories.type, categories.name);
 
   return rows;

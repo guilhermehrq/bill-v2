@@ -11,6 +11,7 @@ export type CategoryRow = {
   icon: string | null;
   color: string | null;
   isSystem: boolean;
+  archivedAt: Date | null;
   transactionCount: number;
 };
 
@@ -28,6 +29,7 @@ export async function listCategoriesWithCounts(userId: string): Promise<Category
       icon: categories.icon,
       color: categories.color,
       isSystem: categories.isSystem,
+      archivedAt: categories.archivedAt,
       transactionCount: sql<number>`COUNT(${transactions.id})::int`,
     })
     .from(categories)

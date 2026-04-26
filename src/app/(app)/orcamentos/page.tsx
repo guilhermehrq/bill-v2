@@ -30,10 +30,12 @@ export default async function OrcamentosPage({ searchParams }: { searchParams: S
   ]);
 
   const categoryOptions = categoryNodes
-    .filter((n) => n.type === "expense")
+    .filter((n) => n.type === "expense" && !n.archivedAt)
     .flatMap((n) => [
       { id: n.id, name: n.name, parentName: null as string | null },
-      ...n.children.map((c) => ({ id: c.id, name: c.name, parentName: n.name })),
+      ...n.children
+        .filter((c) => !c.archivedAt)
+        .map((c) => ({ id: c.id, name: c.name, parentName: n.name })),
     ]);
 
   const previousMonthHasData = months.includes(prev);

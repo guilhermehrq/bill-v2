@@ -1,5 +1,5 @@
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { boolean, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { categoryType } from "./_enums";
 import { tenantColumns } from "./_shared";
 
@@ -13,4 +13,5 @@ export const categories = pgTable("categories", {
   icon: text(),
   color: text(),
   isSystem: boolean("is_system").default(false).notNull(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 });

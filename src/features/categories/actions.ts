@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { categories, transactions } from "@/db/schema";
@@ -102,12 +102,44 @@ export async function updateCategoryAction(
   return { ok: true, data: undefined };
 }
 
+export async function archiveCategoryAction(id: string): Promise<ActionResult> {
+  const uid = await requireUserId();
+  if (typeof uid !== "string") return { ok: false, error: uid.error };
+
+  const result = await db
+    .update(categories)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(categories.id, id), eq(categories.userId, uid)))
+    .returning({ id: categories.id });
+
+  if (result.length === 0) return { ok: false, error: "Categoria não encontrada" };
+
+  revalidate();
+  return { ok: true, data: undefined };
+}
+
+export async function unarchiveCategoryAction(id: string): Promise<ActionResult> {
+  const uid = await requireUserId();
+  if (typeof uid !== "string") return { ok: false, error: uid.error };
+
+  const result = await db
+    .update(categories)
+    .set({ archivedAt: null, updatedAt: new Date() })
+    .where(and(eq(categories.id, id), eq(categories.userId, uid)))
+    .returning({ id: categories.id });
+
+  if (result.length === 0) return { ok: false, error: "Categoria não encontrada" };
+
+  revalidate();
+  return { ok: true, data: undefined };
+}
+
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   const uid = await requireUserId();
   if (typeof uid !== "string") return { ok: false, error: uid.error };
 
   const [row] = await db
-    .select({ isSystem: categories.isSystem })
+    .select({ isSystem: categories.isSystem, archivedAt: categories.archivedAt })
     .from(categories)
     .where(and(eq(categories.id, id), eq(categories.userId, uid)))
     .limit(1);
@@ -116,7 +148,42 @@ export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   if (row.isSystem) {
     return {
       ok: false,
-      error: "Categoria padrão do sistema — use 'mesclar em outra' para substituir.",
+      error: "Categoria padrão do sistema — não pode ser excluída. Arquive-a no lugar.",
+    };
+  }
+  if (!row.archivedAt) {
+    return {
+      ok: false,
+      error: "Arquive a categoria antes de excluir.",
+    };
+  }
+
+  // Block delete if there are transactions; force user to merge first.
+  const [{ count }] = (await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(transactions)
+    .where(and(eq(transactions.userId, uid), eq(transactions.categoryId, id)))) as [
+    { count: number },
+  ];
+
+  if (Number(count) > 0) {
+    return {
+      ok: false,
+      error: `Esta categoria tem ${count} ${count === 1 ? "transação" : "transações"} associadas. Mescle em outra antes de excluir.`,
+    };
+  }
+
+  // Also block if it has children — they'd be orphaned. Force merge first.
+  const children = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.userId, uid), eq(categories.parentId, id)))
+    .limit(1);
+
+  if (children.length > 0) {
+    return {
+      ok: false,
+      error: "Esta categoria tem subcategorias. Mescle em outra antes de excluir.",
     };
   }
 

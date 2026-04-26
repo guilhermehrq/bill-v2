@@ -22,10 +22,14 @@ export default async function RecorrenciasPage() {
     listCategoriesWithCounts(user.id),
   ]);
 
-  const categoryOptions = categoryNodes.flatMap((n) => [
-    { id: n.id, name: n.name, type: n.type, parentName: null as string | null },
-    ...n.children.map((c) => ({ id: c.id, name: c.name, type: n.type, parentName: n.name })),
-  ]);
+  const categoryOptions = categoryNodes
+    .filter((n) => !n.archivedAt)
+    .flatMap((n) => [
+      { id: n.id, name: n.name, type: n.type, parentName: null as string | null },
+      ...n.children
+        .filter((c) => !c.archivedAt)
+        .map((c) => ({ id: c.id, name: c.name, type: n.type, parentName: n.name })),
+    ]);
 
   return (
     <div className="py-4">

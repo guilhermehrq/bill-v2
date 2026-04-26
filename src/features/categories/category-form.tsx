@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -106,8 +107,10 @@ export function CategoryForm({
   const selectedType = watch("type");
   const selectedColor = watch("color");
   const selectedParent = watch("parentId");
+  const selectedIcon = watch("icon");
 
   const availableParents = parentOptions.filter((p) => p.type === selectedType);
+  const isParent = !selectedParent;
 
   function onSubmit(values: CreateCategoryInput) {
     setFormError(null);
@@ -194,6 +197,22 @@ export function CategoryForm({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {isParent && (
+            <div className="space-y-2">
+              <Label>Ícone</Label>
+              <div className="flex items-center gap-3">
+                <IconPicker
+                  value={selectedIcon ?? null}
+                  onChange={(icon) => setValue("icon", icon ?? "")}
+                  color={selectedColor ?? null}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Aparece em listagens de transação e relatórios.
+                </p>
+              </div>
             </div>
           )}
 
