@@ -13,6 +13,7 @@ export type AccountWithBalance = {
   initialBalanceCents: number;
   currency: string;
   archived: boolean;
+  includeInTotalBalance: boolean;
   balanceCents: number;
   transactionCount: number;
 };
@@ -29,6 +30,7 @@ export async function listAccountsWithBalances(userId: string): Promise<AccountW
       initialBalanceCents: accounts.initialBalanceCents,
       currency: accounts.currency,
       archived: accounts.archived,
+      includeInTotalBalance: accounts.includeInTotalBalance,
       balanceDelta: sql<number>`COALESCE(SUM(
         CASE
           WHEN ${transactions.type} = 'income'  THEN ${transactions.amountCents}
@@ -57,6 +59,7 @@ export async function listAccountsWithBalances(userId: string): Promise<AccountW
     initialBalanceCents: Number(r.initialBalanceCents),
     currency: r.currency,
     archived: r.archived,
+    includeInTotalBalance: r.includeInTotalBalance,
     balanceCents: Number(r.initialBalanceCents) + Number(r.balanceDelta),
     transactionCount: Number(r.transactionCount),
   }));

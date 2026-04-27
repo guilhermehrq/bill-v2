@@ -1,8 +1,10 @@
 "use client";
 
 import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { AccountIcon } from "@/components/ui/account-icon";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -61,20 +63,20 @@ export function AccountCard({ account, onEdit }: Props) {
   return (
     <Card className={cn("relative flex flex-col gap-2 p-4", account.archived && "opacity-60")}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: account.color ?? "#6366f1" }}
-            aria-hidden
-          />
-          <div>
-            <h3 className="text-sm leading-tight font-semibold">{account.name}</h3>
-            <p className="text-muted-foreground text-xs">
+        <Link
+          href={`/contas/${account.id}`}
+          className="hover:bg-accent/40 -m-1 flex flex-1 items-center gap-3 rounded-md p-1 transition-colors"
+        >
+          <AccountIcon icon={account.icon} color={account.color} size="md" />
+          <div className="min-w-0">
+            <h3 className="truncate text-sm leading-tight font-semibold">{account.name}</h3>
+            <p className="text-muted-foreground truncate text-xs">
               {typeLabel}
               {account.institution ? ` · ${account.institution}` : ""}
+              {!account.includeInTotalBalance && " · fora do saldo"}
             </p>
           </div>
-        </div>
+        </Link>
         <DropdownMenu>
           <DropdownMenuTrigger
             className="hover:bg-accent rounded-md p-1 outline-hidden"

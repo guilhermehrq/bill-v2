@@ -10,6 +10,7 @@ export const createAccountSchema = z.object({
     .regex(/^#[0-9a-f]{6}$/i, "Cor inválida")
     .optional(),
   icon: z.string().trim().optional(),
+  includeInTotalBalance: z.boolean().default(true),
 });
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 
@@ -26,5 +27,6 @@ export const accountFormSchema = z.object({
     .regex(/^#[0-9a-f]{6}$/i, "Cor inválida")
     .optional(),
   icon: z.string().optional(),
+  includeInTotalBalance: z.boolean().default(true),
 });
 export type AccountFormValues = z.infer<typeof accountFormSchema>;

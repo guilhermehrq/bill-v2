@@ -60,9 +60,13 @@ export async function loadDashboard(
       count: sql<number>`COUNT(*)::int`,
     })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.archived, false)))) as [
-    { total: number | string; count: number },
-  ];
+    .where(
+      and(
+        eq(accounts.userId, userId),
+        eq(accounts.archived, false),
+        eq(accounts.includeInTotalBalance, true),
+      ),
+    )) as [{ total: number | string; count: number }];
 
   const [balanceDeltaRow] = (await db
     .select({
@@ -82,6 +86,7 @@ export async function loadDashboard(
       and(
         eq(transactions.userId, userId),
         eq(accounts.archived, false),
+        eq(accounts.includeInTotalBalance, true),
         eq(transactions.isPaid, true),
       ),
     )) as [{ delta: number | string }];

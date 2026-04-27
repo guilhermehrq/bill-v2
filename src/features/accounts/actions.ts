@@ -48,6 +48,7 @@ export async function createAccountAction(
       initialBalanceCents: parsed.data.initialBalanceCents,
       color: parsed.data.color ?? null,
       icon: parsed.data.icon ?? null,
+      includeInTotalBalance: parsed.data.includeInTotalBalance ?? true,
     })
     .returning({ id: accounts.id });
 
@@ -80,6 +81,8 @@ export async function updateAccountAction(
     updates.initialBalanceCents = parsed.data.initialBalanceCents;
   if (parsed.data.color !== undefined) updates.color = parsed.data.color ?? null;
   if (parsed.data.icon !== undefined) updates.icon = parsed.data.icon ?? null;
+  if (parsed.data.includeInTotalBalance !== undefined)
+    updates.includeInTotalBalance = parsed.data.includeInTotalBalance;
 
   const result = await db
     .update(accounts)

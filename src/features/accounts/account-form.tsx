@@ -4,8 +4,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { AccountIconPicker } from "@/components/ui/account-icon-picker";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MoneyInput } from "@/components/ui/money-input";
@@ -42,6 +44,7 @@ type ExistingAccount = {
   initialBalanceCents: number;
   color: string | null;
   icon: string | null;
+  includeInTotalBalance: boolean;
 };
 
 type Props = {
@@ -72,6 +75,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
       initialBalanceCents: 0,
       color: DEFAULT_ACCOUNT_COLOR,
       icon: DEFAULT_ACCOUNT_ICON,
+      includeInTotalBalance: true,
     },
   });
 
@@ -84,6 +88,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
         initialBalanceCents: account?.initialBalanceCents ?? 0,
         color: account?.color ?? DEFAULT_ACCOUNT_COLOR,
         icon: account?.icon ?? DEFAULT_ACCOUNT_ICON,
+        includeInTotalBalance: account?.includeInTotalBalance ?? true,
       });
       setFormError(null);
     }
@@ -97,6 +102,7 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
       initialBalanceCents: values.initialBalanceCents,
       color: values.color,
       icon: values.icon,
+      includeInTotalBalance: values.includeInTotalBalance,
     };
 
     setFormError(null);
@@ -117,6 +123,8 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
   }
 
   const selectedColor = watch("color");
+  const selectedIcon = watch("icon");
+  const includeInTotal = watch("includeInTotalBalance");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -182,6 +190,15 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
           </div>
 
           <div className="space-y-2">
+            <Label>Ícone</Label>
+            <AccountIconPicker
+              value={selectedIcon ?? null}
+              onChange={(icon) => setValue("icon", icon ?? "")}
+              color={selectedColor ?? null}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Cor</Label>
             <div className="flex flex-wrap gap-2">
               {ACCOUNT_COLOR_PALETTE.map((color) => (
@@ -197,6 +214,30 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
                   aria-label={`Cor ${color}`}
                 />
               ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Usada quando o ícone é genérico. Logos de instituição mantêm sua cor original.
+            </p>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="includeInTotal"
+                checked={includeInTotal}
+                onCheckedChange={(v) => setValue("includeInTotalBalance", v === true)}
+                className="mt-0.5"
+              />
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="includeInTotal" className="cursor-pointer text-sm font-medium">
+                  Incluir no saldo total
+                </Label>
+                <p className="text-muted-foreground text-xs">
+                  Quando desmarcado, esta conta não conta no &ldquo;Saldo total&rdquo; do dashboard
+                  (útil para reservas e investimentos que você não quer somar ao seu caixa do
+                  dia-a-dia).
+                </p>
+              </div>
             </div>
           </div>
 

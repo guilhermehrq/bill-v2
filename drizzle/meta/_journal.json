@@ -43,6 +43,13 @@
       "when": 1777242407236,
       "tag": "0005_faithful_terror",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777245725106,
+      "tag": "0006_chilly_chamber",
+      "breakpoints": true
     }
   ]
 }

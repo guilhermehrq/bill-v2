@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "include_in_total_balance" boolean DEFAULT true NOT NULL;

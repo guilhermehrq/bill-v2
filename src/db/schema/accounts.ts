@@ -12,4 +12,5 @@ export const accounts = pgTable("accounts", {
   initialBalanceCents: bigint("initial_balance_cents", { mode: "number" }).default(0).notNull(),
   currency: text().default("BRL").notNull(),
   archived: boolean().default(false).notNull(),
+  includeInTotalBalance: boolean("include_in_total_balance").default(true).notNull(),
 });

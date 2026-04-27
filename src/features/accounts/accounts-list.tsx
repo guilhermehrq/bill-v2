@@ -18,7 +18,10 @@ export function AccountsList({ accounts }: Props) {
 
   const active = accounts.filter((a) => !a.archived);
   const archived = accounts.filter((a) => a.archived);
-  const totalActiveCents = active.reduce((acc, a) => acc + a.balanceCents, 0);
+  const totalActiveCents = active
+    .filter((a) => a.includeInTotalBalance)
+    .reduce((acc, a) => acc + a.balanceCents, 0);
+  const excludedFromTotal = active.filter((a) => !a.includeInTotalBalance).length;
 
   function openNew() {
     setEditing(null);
@@ -47,6 +50,12 @@ export function AccountsList({ accounts }: Props) {
           <div>
             <p className="text-muted-foreground text-xs uppercase">Saldo total</p>
             <p className="tabular text-2xl font-semibold">{format(totalActiveCents)}</p>
+            {excludedFromTotal > 0 && (
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {excludedFromTotal}{" "}
+                {excludedFromTotal === 1 ? "conta fora do total" : "contas fora do total"}
+              </p>
+            )}
           </div>
           <p className="text-muted-foreground text-sm">
             {active.length} {active.length === 1 ? "conta ativa" : "contas ativas"}
