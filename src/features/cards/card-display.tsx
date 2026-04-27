@@ -1,9 +1,10 @@
 "use client";
 
-import { Archive, ArchiveRestore, CreditCard, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { AccountIcon } from "@/components/ui/account-icon";
 import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -61,11 +62,10 @@ export function CreditCardDisplay({ card, onEdit }: Props) {
       <div className="flex items-start gap-3">
         <Link
           href={`/cartoes/${card.id}`}
-          className="flex size-12 shrink-0 items-center justify-center rounded-md transition-transform hover:scale-105"
-          style={{ backgroundColor: card.color ?? "#6366f1" }}
-          aria-label={`Abrir fatura de ${card.name}`}
+          className="shrink-0 transition-transform hover:scale-105"
+          aria-label={`Abrir cartão ${card.name}`}
         >
-          <CreditCard className="size-6 text-white" />
+          <AccountIcon icon={card.icon} color={card.color} size="lg" />
         </Link>
         <div className="min-w-0 flex-1">
           <Link href={`/cartoes/${card.id}`} className="hover:underline">
@@ -73,7 +73,6 @@ export function CreditCardDisplay({ card, onEdit }: Props) {
           </Link>
           <p className="text-muted-foreground truncate text-xs">
             {card.brand ? card.brand.charAt(0).toUpperCase() + card.brand.slice(1) : "—"}
-            {card.lastDigits && ` · •••• ${card.lastDigits}`}
           </p>
         </div>
         <DropdownMenu>

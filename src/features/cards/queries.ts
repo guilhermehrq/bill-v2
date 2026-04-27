@@ -7,7 +7,6 @@ export type CardWithInvoice = {
   id: string;
   name: string;
   brand: string | null;
-  lastDigits: string | null;
   limitCents: number;
   closingDay: number;
   dueDay: number;
@@ -36,7 +35,6 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
       id: creditCards.id,
       name: creditCards.name,
       brand: creditCards.brand,
-      lastDigits: creditCards.lastDigits,
       limitCents: creditCards.limitCents,
       closingDay: creditCards.closingDay,
       dueDay: creditCards.dueDay,
@@ -87,7 +85,6 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
       id: r.id,
       name: r.name,
       brand: r.brand,
-      lastDigits: r.lastDigits,
       limitCents: Number(r.limitCents),
       closingDay: r.closingDay,
       dueDay: r.dueDay,

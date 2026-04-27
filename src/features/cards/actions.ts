@@ -46,7 +46,6 @@ export async function createCardAction(
       userId: uid,
       name: parsed.data.name,
       brand: parsed.data.brand || null,
-      lastDigits: parsed.data.lastDigits || null,
       limitCents: parsed.data.limitCents,
       closingDay: parsed.data.closingDay,
       dueDay: parsed.data.dueDay,
@@ -74,7 +73,6 @@ export async function updateCardAction(id: string, input: UpdateCardInput): Prom
   const updates: Partial<typeof creditCards.$inferInsert> = { updatedAt: new Date() };
   if (parsed.data.name !== undefined) updates.name = parsed.data.name;
   if (parsed.data.brand !== undefined) updates.brand = parsed.data.brand || null;
-  if (parsed.data.lastDigits !== undefined) updates.lastDigits = parsed.data.lastDigits || null;
   if (parsed.data.limitCents !== undefined) updates.limitCents = parsed.data.limitCents;
   if (parsed.data.closingDay !== undefined) updates.closingDay = parsed.data.closingDay;
   if (parsed.data.dueDay !== undefined) updates.dueDay = parsed.data.dueDay;

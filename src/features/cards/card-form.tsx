@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AccountIconPicker } from "@/components/ui/account-icon-picker";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,6 @@ type ExistingCard = {
   id: string;
   name: string;
   brand: string | null;
-  lastDigits: string | null;
   limitCents: number;
   closingDay: number;
   dueDay: number;
@@ -55,33 +55,33 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
 
   const [name, setName] = useState("");
   const [brand, setBrand] = useState<string>("");
-  const [lastDigits, setLastDigits] = useState("");
   const [limitCents, setLimitCents] = useState(0);
   const [closingDay, setClosingDay] = useState<number>(1);
   const [dueDay, setDueDay] = useState<number>(10);
   const [defaultAccountId, setDefaultAccountId] = useState<string | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_CARD_COLOR);
+  const [icon, setIcon] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     if (card) {
       setName(card.name);
       setBrand(card.brand ?? "");
-      setLastDigits(card.lastDigits ?? "");
       setLimitCents(card.limitCents);
       setClosingDay(card.closingDay);
       setDueDay(card.dueDay);
       setDefaultAccountId(card.defaultAccountId);
       setColor(card.color ?? DEFAULT_CARD_COLOR);
+      setIcon(card.icon ?? null);
     } else {
       setName("");
       setBrand("");
-      setLastDigits("");
       setLimitCents(0);
       setClosingDay(1);
       setDueDay(10);
       setDefaultAccountId(accounts[0]?.id ?? null);
       setColor(DEFAULT_CARD_COLOR);
+      setIcon(null);
     }
     setError(null);
   }, [open, card, accounts]);
@@ -100,12 +100,12 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
     const payload = {
       name: name.trim(),
       brand: brand || undefined,
-      lastDigits: lastDigits || undefined,
       limitCents,
       closingDay,
       dueDay,
       defaultAccountId,
       color,
+      icon: icon ?? undefined,
     };
 
     startTransition(async () => {
@@ -149,36 +149,29 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="brand">Bandeira</Label>
-              <Select
-                value={brand}
-                onValueChange={(v) => setBrand(v ?? "")}
-                items={CARD_BRANDS.map((b) => ({ value: b.value, label: b.label }))}
-              >
-                <SelectTrigger id="brand">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CARD_BRANDS.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastDigits">Final</Label>
-              <Input
-                id="lastDigits"
-                placeholder="1234"
-                maxLength={4}
-                value={lastDigits}
-                onChange={(e) => setLastDigits(e.target.value.replace(/\D/g, ""))}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="brand">Bandeira</Label>
+            <Select
+              value={brand}
+              onValueChange={(v) => setBrand(v ?? "")}
+              items={CARD_BRANDS.map((b) => ({ value: b.value, label: b.label }))}
+            >
+              <SelectTrigger id="brand">
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                {CARD_BRANDS.map((b) => (
+                  <SelectItem key={b.value} value={b.value}>
+                    {b.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Ícone</Label>
+            <AccountIconPicker value={icon} onChange={setIcon} color={color} />
           </div>
 
           <div className="space-y-2">

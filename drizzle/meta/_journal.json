@@ -50,6 +50,13 @@
       "when": 1777245725106,
       "tag": "0006_chilly_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777251977761,
+      "tag": "0007_lucky_oracle",
+      "breakpoints": true
     }
   ]
 }
