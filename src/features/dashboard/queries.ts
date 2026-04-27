@@ -13,6 +13,8 @@ export type MonthlyFlow = {
 export type DashboardData = {
   totalBalanceCents: number;
   activeAccountCount: number;
+  openInvoicesTotalCents: number;
+  openInvoicesCount: number;
   currentMonth: {
     incomeCents: number;
     expenseCents: number;
@@ -93,6 +95,25 @@ export async function loadDashboard(
 
   const totalBalanceCents = Number(balanceRow?.total ?? 0) + Number(balanceDeltaRow?.delta ?? 0);
   const activeAccountCount = Number(balanceRow?.count ?? 0);
+
+  // Open invoices total (open + closed + partial + overdue, NOT paid).
+  // Sum of remaining = totalCents - paidCents.
+  const [openInvoicesRow] = (await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${creditCardInvoices.totalCents} - ${creditCardInvoices.paidCents}), 0)::bigint`,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(creditCardInvoices)
+    .where(
+      and(
+        eq(creditCardInvoices.userId, userId),
+        sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
+        sql`${creditCardInvoices.totalCents} > ${creditCardInvoices.paidCents}`,
+      ),
+    )) as [{ total: number | string; count: number }];
+
+  const openInvoicesTotalCents = Number(openInvoicesRow?.total ?? 0);
+  const openInvoicesCount = Number(openInvoicesRow?.count ?? 0);
 
   const [currentMonth, previousMonth] = await Promise.all([
     loadMonthTotals(userId, currentMonthStart, currentMonthEnd, mode),
@@ -184,6 +205,8 @@ export async function loadDashboard(
   return {
     totalBalanceCents,
     activeAccountCount,
+    openInvoicesTotalCents,
+    openInvoicesCount,
     currentMonth,
     previousMonth,
     cashflow,

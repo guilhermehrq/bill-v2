@@ -44,8 +44,33 @@ export default async function HomePage() {
         <CreditCardModeSelector currentMode={settings.creditCardReportMode} />
       </header>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KpiCard label="Saldo total" valueCents={data.totalBalanceCents} />
+      <div className="grid grid-cols-2 gap-3">
+        <KpiCard
+          label="Saldo total"
+          valueCents={data.totalBalanceCents}
+          href="/contas"
+          hint={
+            data.activeAccountCount === 1
+              ? "1 conta ativa"
+              : `${data.activeAccountCount} contas ativas`
+          }
+        />
+        <KpiCard
+          label="Fatura acumulada"
+          valueCents={data.openInvoicesTotalCents}
+          tone={data.openInvoicesTotalCents > 0 ? "expense" : "neutral"}
+          href="/cartoes"
+          hint={
+            data.openInvoicesCount === 0
+              ? "Sem faturas em aberto"
+              : data.openInvoicesCount === 1
+                ? "1 fatura em aberto"
+                : `${data.openInvoicesCount} faturas em aberto`
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <KpiCard
           label="Receitas do mês"
           valueCents={data.currentMonth.incomeCents}
