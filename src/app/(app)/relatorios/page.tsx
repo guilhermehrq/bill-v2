@@ -1,10 +1,6 @@
 import { redirect } from "next/navigation";
 import { ReportsView } from "@/features/reports/components/reports-view";
-import {
-  PERIOD_LABELS,
-  periodToRange,
-  type PeriodPreset,
-} from "@/features/reports/components/period-selector";
+import { PERIOD_LABELS, periodToRange, type PeriodPreset } from "@/features/reports/period";
 import { loadComparisonData, loadReportData } from "@/features/reports/queries";
 import { getUserSettings } from "@/features/settings/queries";
 import { createClient } from "@/lib/supabase/server";

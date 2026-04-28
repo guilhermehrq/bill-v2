@@ -8,7 +8,8 @@ import { CategoryTreemap } from "./category-treemap";
 import { ComparisonView } from "./comparison-view";
 import { EvolutionChart } from "./evolution-chart";
 import { ExportCsvButton } from "./export-csv-button";
-import { PeriodSelector, type PeriodPreset } from "./period-selector";
+import type { PeriodPreset } from "../period";
+import { PeriodSelector } from "./period-selector";
 
 type Props = {
   data: ReportData;

@@ -28,13 +28,13 @@ async function requireUserId(): Promise<string | { error: string }> {
   return user.id;
 }
 
-export const payInvoiceSchema = z.object({
+const payInvoiceSchema = z.object({
   invoiceId: z.string().uuid(),
   accountId: z.string().uuid(),
   amountCents: z.number().int().positive("Valor precisa ser maior que zero"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
 });
-export type PayInvoiceInput = z.infer<typeof payInvoiceSchema>;
+type PayInvoiceInput = z.infer<typeof payInvoiceSchema>;
 
 export async function payInvoiceAction(input: PayInvoiceInput): Promise<ActionResult> {
   const parsed = payInvoiceSchema.safeParse(input);
