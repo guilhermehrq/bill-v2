@@ -1,0 +1,2 @@
+CREATE TYPE "public"."statement_view_mode" AS ENUM('cashflow', 'all_entries');--> statement-breakpoint
+ALTER TABLE "user_settings" ADD COLUMN "statement_view_mode" "statement_view_mode" DEFAULT 'all_entries' NOT NULL;

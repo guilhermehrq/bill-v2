@@ -1,9 +1,13 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { searchTransactions, type TransactionFilters } from "@/features/transactions/list-queries";
+import { getUserSettings, type StatementViewMode } from "@/features/settings/queries";
+import { type TransactionFilters } from "@/features/transactions/list-queries";
 import { listFormAccountOptions, listFormCategoryOptions } from "@/features/transactions/queries";
+import { loadStatement } from "@/features/transactions/statement-data";
+import { StatementModeToggle } from "@/features/transactions/statement-mode-toggle";
+import { StatementTotalsBar } from "@/features/transactions/statement-totals";
 import { TransactionFilters as FiltersBar } from "@/features/transactions/transaction-filters";
 import { TransactionsList } from "@/features/transactions/transactions-list";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +23,10 @@ type SearchParams = Promise<{
   from?: string;
   to?: string;
   page?: string;
+  modo?: string;
 }>;
+
+const VALID_MODES: StatementViewMode[] = ["cashflow", "all_entries"];
 
 export default async function ExtratoPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
@@ -30,6 +37,12 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Sear
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const settings = await getUserSettings(user.id);
+  const requestedMode = VALID_MODES.includes(params.modo as StatementViewMode)
+    ? (params.modo as StatementViewMode)
+    : null;
+  const mode: StatementViewMode = requestedMode ?? settings.statementViewMode;
+
   const { from, to } = resolvePeriod(params);
   const filters: TransactionFilters = {
     from,
@@ -38,14 +51,15 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Sear
     accountIds: params.account ? [params.account] : undefined,
     categoryIds: params.category ? [params.category] : undefined,
     types: params.type ? ([params.type] as TransactionFilters["types"]) : undefined,
+    mode,
   };
 
   const page = params.page ? Math.max(0, Number(params.page) - 1) : 0;
 
-  const [accounts, categories, result] = await Promise.all([
+  const [accounts, categories, statement] = await Promise.all([
     listFormAccountOptions(user.id),
     listFormCategoryOptions(user.id),
-    searchTransactions(user.id, filters, page),
+    loadStatement(user.id, filters, page),
   ]);
 
   const currentPage = page + 1;
@@ -58,22 +72,23 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Sear
 
   return (
     <div className="space-y-4 py-4">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Extrato</h1>
           <p className="text-muted-foreground text-sm">
-            {result.total === 0
+            {statement.total === 0
               ? "Nada por aqui ainda."
-              : `${result.total} ${result.total === 1 ? "transação" : "transações"} no filtro atual`}
+              : `${statement.total} ${statement.total === 1 ? "lançamento" : "lançamentos"} no filtro atual`}
           </p>
         </div>
+        <StatementModeToggle current={mode} defaultMode={settings.statementViewMode} />
       </header>
 
       <FiltersBar accounts={accounts} categories={categories} />
 
-      <TransactionsList items={result.items} />
+      <TransactionsList items={statement.items} />
 
-      {(result.hasMore || currentPage > 1) && (
+      {(statement.hasMore || currentPage > 1) && (
         <Card className="flex items-center justify-between p-3">
           {currentPage > 1 ? (
             <Link
@@ -88,7 +103,7 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Sear
             </Button>
           )}
           <span className="text-muted-foreground text-xs">Página {currentPage}</span>
-          {result.hasMore ? (
+          {statement.hasMore ? (
             <Link
               href={buildPageLink(currentPage + 1)}
               className="border-input bg-background hover:bg-accent inline-flex items-center rounded-md border px-3 py-1.5 text-sm"
@@ -102,6 +117,8 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Sear
           )}
         </Card>
       )}
+
+      <StatementTotalsBar totals={statement.totals} />
     </div>
   );
 }

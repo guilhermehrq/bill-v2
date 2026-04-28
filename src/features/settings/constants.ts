@@ -1,7 +1,9 @@
 export type CreditCardReportMode = "invoice_date" | "purchase_date" | "installment_date";
+export type StatementViewMode = "cashflow" | "all_entries";
 
 export type UserSettings = {
   creditCardReportMode: CreditCardReportMode;
+  statementViewMode: StatementViewMode;
   theme: "system" | "light" | "dark";
   density: "comfortable" | "compact";
   timezone: string;
@@ -10,10 +12,29 @@ export type UserSettings = {
 
 export const DEFAULT_SETTINGS: UserSettings = {
   creditCardReportMode: "purchase_date",
+  statementViewMode: "all_entries",
   theme: "system",
   density: "comfortable",
   timezone: "America/Sao_Paulo",
   locale: "pt-BR",
+};
+
+export const STATEMENT_VIEW_MODE_LABELS: Record<
+  StatementViewMode,
+  { label: string; short: string; description: string }
+> = {
+  cashflow: {
+    label: "Fluxo de caixa",
+    short: "fluxo de caixa",
+    description:
+      "Apenas lançamentos que afetam seu saldo. Compras de cartão somem; faturas e pagamentos aparecem.",
+  },
+  all_entries: {
+    label: "Todos os lançamentos",
+    short: "todos os lançamentos",
+    description:
+      "Tudo que você lançou, incluindo compras individuais no cartão. Faturas e pagamentos não aparecem para evitar duplicação.",
+  },
 };
 
 export const CREDIT_CARD_MODE_LABELS: Record<

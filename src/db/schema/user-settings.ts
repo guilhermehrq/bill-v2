@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { authUsers } from "./_auth";
-import { creditCardReportMode, densityMode, themeMode } from "./_enums";
+import { creditCardReportMode, densityMode, statementViewMode, themeMode } from "./_enums";
 
 // 1:1 with auth.users — row created by trigger on signup.
 // user_id is both FK to auth.users AND carries a unique index.
@@ -14,6 +14,7 @@ export const userSettings = pgTable(
     creditCardReportMode: creditCardReportMode("credit_card_report_mode")
       .default("purchase_date")
       .notNull(),
+    statementViewMode: statementViewMode("statement_view_mode").default("all_entries").notNull(),
     theme: themeMode().default("system").notNull(),
     density: densityMode().default("comfortable").notNull(),
     defaultCurrency: text("default_currency").default("BRL").notNull(),

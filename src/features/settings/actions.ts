@@ -31,6 +31,9 @@ export async function updateUserSettingsAction(input: UpdateSettingsInput): Prom
   if (parsed.data.creditCardReportMode !== undefined) {
     updates.creditCardReportMode = parsed.data.creditCardReportMode;
   }
+  if (parsed.data.statementViewMode !== undefined) {
+    updates.statementViewMode = parsed.data.statementViewMode;
+  }
   if (parsed.data.theme !== undefined) updates.theme = parsed.data.theme;
   if (parsed.data.density !== undefined) updates.density = parsed.data.density;
 

@@ -56,6 +56,8 @@ export const creditCardReportMode = pgEnum("credit_card_report_mode", [
   "installment_date",
 ]);
 
+export const statementViewMode = pgEnum("statement_view_mode", ["cashflow", "all_entries"]);
+
 export const importSourceType = pgEnum("import_source_type", ["account", "card", "category"]);
 
 export const importTargetType = pgEnum("import_target_type", [

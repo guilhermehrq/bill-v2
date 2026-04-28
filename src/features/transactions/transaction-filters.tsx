@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -87,101 +88,128 @@ export function TransactionFilters({ accounts, categories }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-md border">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Mês anterior"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="tabular min-w-[9ch] text-center text-sm font-medium">
-            {formatMonthLabel(currentMonth)}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => shiftMonth(1)}
-            aria-label="Mês seguinte"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[auto_1fr_1fr_1fr_2fr]">
+        <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+          <span className="invisible text-xs font-medium">.</span>
+          <div className="flex items-center gap-1 rounded-md border">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => shiftMonth(-1)}
+              aria-label="Mês anterior"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="tabular min-w-[9ch] text-center text-sm font-medium">
+              {formatMonthLabel(currentMonth)}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => shiftMonth(1)}
+              aria-label="Mês seguinte"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
 
-        <Select
-          value={accountId}
-          onValueChange={(v) => pushParams({ account: v })}
-          items={[
-            { value: "all", label: "Todas contas" },
-            ...accounts.map((a) => ({ value: a.id, label: a.name })),
-          ]}
-        >
-          <SelectTrigger size="sm" className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas contas</SelectItem>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="filter-account" className="text-xs font-medium">
+            Conta
+          </Label>
+          <Select
+            value={accountId}
+            onValueChange={(v) => pushParams({ account: v })}
+            items={[
+              { value: "all", label: "Todas" },
+              ...accounts.map((a) => ({ value: a.id, label: a.name })),
+            ]}
+          >
+            <SelectTrigger id="filter-account" size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Select
-          value={categoryId}
-          onValueChange={(v) => pushParams({ category: v })}
-          items={[
-            { value: "all", label: "Todas categorias" },
-            ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
-          ]}
-        >
-          <SelectTrigger size="sm" className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="max-h-80">
-            <SelectItem value="all">Todas categorias</SelectItem>
-            {categoryOptions.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="filter-category" className="text-xs font-medium">
+            Categoria
+          </Label>
+          <Select
+            value={categoryId}
+            onValueChange={(v) => pushParams({ category: v })}
+            items={[
+              { value: "all", label: "Todas" },
+              ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
+            ]}
+          >
+            <SelectTrigger id="filter-category" size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-80">
+              <SelectItem value="all">Todas</SelectItem>
+              {categoryOptions.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <Select
-          value={type}
-          onValueChange={(v) => pushParams({ type: v })}
-          items={[
-            { value: "all", label: "Todos tipos" },
-            { value: "income", label: "Receitas" },
-            { value: "expense", label: "Despesas" },
-            { value: "transfer", label: "Transferências" },
-          ]}
-        >
-          <SelectTrigger size="sm" className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos tipos</SelectItem>
-            <SelectItem value="income">Receitas</SelectItem>
-            <SelectItem value="expense">Despesas</SelectItem>
-            <SelectItem value="transfer">Transferências</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="filter-type" className="text-xs font-medium">
+            Tipo
+          </Label>
+          <Select
+            value={type}
+            onValueChange={(v) => pushParams({ type: v })}
+            items={[
+              { value: "all", label: "Todos" },
+              { value: "income", label: "Receitas" },
+              { value: "expense", label: "Despesas" },
+              { value: "transfer", label: "Transferências" },
+            ]}
+          >
+            <SelectTrigger id="filter-type" size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="income">Receitas</SelectItem>
+              <SelectItem value="expense">Despesas</SelectItem>
+              <SelectItem value="transfer">Transferências</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        <form onSubmit={submitSearch} className="relative min-w-[200px] flex-1">
-          <Search className="text-muted-foreground absolute top-2.5 left-2 size-4" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar descrição..."
-            className="pl-8"
-          />
-        </form>
+        <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+          <Label htmlFor="filter-search" className="text-xs font-medium">
+            Busca
+          </Label>
+          <form onSubmit={submitSearch} className="relative">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-2 left-2 size-4"
+              aria-hidden
+            />
+            <Input
+              id="filter-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Descrição..."
+              className="pl-8"
+            />
+          </form>
+        </div>
       </div>
 
       {activeChips.length > 0 && (
