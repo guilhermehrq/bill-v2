@@ -1,36 +1,44 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Copy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, FilePlus, ListPlus, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CreditCardModeSelector } from "@/features/settings/credit-card-mode-selector";
 import type { CreditCardReportMode } from "@/features/settings/queries";
+import { updateUserSettingsAction } from "@/features/settings/actions";
 import { copyBudgetsFromMonthAction } from "./actions";
-import { BudgetForm } from "./budget-form";
+import { BudgetAlertSettings } from "./budget-alert-settings";
+import { BudgetTreeDialog, type BudgetTreeCategory } from "./budget-tree-dialog";
 import { BudgetProgressRow } from "./budget-progress-row";
-import type { BudgetRow, BudgetsOverview } from "./queries";
+import type { BudgetsOverview } from "./queries";
 
 type Props = {
   overview: BudgetsOverview;
-  categoryOptions: Array<{ id: string; name: string; parentName: string | null }>;
+  categoryTree: BudgetTreeCategory[];
   previousMonth: string;
   previousMonthHasData: boolean;
   creditCardMode: CreditCardReportMode;
+  showForecasts: boolean;
+  budgetAlertThresholds: number[];
 };
 
 export function BudgetsView({
   overview,
-  categoryOptions,
+  categoryTree,
   previousMonth,
   previousMonthHasData,
   creditCardMode,
+  showForecasts,
+  budgetAlertThresholds,
 }: Props) {
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<BudgetRow | null>(null);
+  const [treeOpen, setTreeOpen] = useState(false);
   const [isCopying, startCopy] = useTransition();
+  const [isToggling, startToggle] = useTransition();
+  const router = useRouter();
 
   const monthLabel = formatMonth(overview.month);
   const daysLeft = Math.max(0, overview.daysInMonth - overview.daysElapsed);
@@ -40,15 +48,9 @@ export function BudgetsView({
       ? (overview.totalSpentCents / overview.totalBudgetedCents) * 100
       : 0;
 
-  function openNew() {
-    setEditing(null);
-    setFormOpen(true);
-  }
-
-  function openEdit(b: BudgetRow) {
-    setEditing(b);
-    setFormOpen(true);
-  }
+  const existingByCategoryId = Object.fromEntries(
+    overview.budgets.map((b) => [b.categoryId, b.amountCents]),
+  );
 
   function handleCopy() {
     startCopy(async () => {
@@ -68,6 +70,19 @@ export function BudgetsView({
     });
   }
 
+  function handleToggleForecasts(next: boolean) {
+    startToggle(async () => {
+      const result = await updateUserSettingsAction({ showBudgetForecasts: next });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  const isEmpty = overview.budgets.length === 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -81,13 +96,11 @@ export function BudgetsView({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CreditCardModeSelector currentMode={creditCardMode} />
-          {previousMonthHasData && (
-            <Button variant="outline" onClick={handleCopy} disabled={isCopying}>
-              <Copy className="mr-2 size-4" />
-              {isCopying ? "Copiando..." : "Copiar mês anterior"}
+          {!isEmpty && (
+            <Button onClick={() => setTreeOpen(true)}>
+              <ListPlus className="mr-2 size-4" /> Definir orçamentos
             </Button>
           )}
-          <Button onClick={openNew}>+ Novo orçamento</Button>
         </div>
       </div>
 
@@ -109,13 +122,26 @@ export function BudgetsView({
         </Link>
       </div>
 
-      {overview.budgets.length > 0 && (
+      {!isEmpty && (
         <Card className="space-y-3 p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-muted-foreground text-xs uppercase">Resumo do mês</p>
-            <p className="text-muted-foreground tabular text-xs">
-              {Math.round(totalPct)}% · {overview.daysElapsed}/{overview.daysInMonth} dias
-            </p>
+            <div className="flex items-center gap-3">
+              <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={showForecasts}
+                  disabled={isToggling}
+                  onChange={(e) => handleToggleForecasts(e.target.checked)}
+                  className="size-3.5"
+                />
+                <Sparkles className="size-3" />
+                <span>Incluir previsões</span>
+              </label>
+              <p className="text-muted-foreground tabular text-xs">
+                {Math.round(totalPct)}% · {overview.daysElapsed}/{overview.daysInMonth} dias
+              </p>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3 text-sm">
             <div>
@@ -123,8 +149,15 @@ export function BudgetsView({
               <p className="tabular font-semibold">{formatMoney(overview.totalBudgetedCents)}</p>
             </div>
             <div>
-              <p className="text-muted-foreground text-xs uppercase">Gasto</p>
+              <p className="text-muted-foreground text-xs uppercase">
+                {showForecasts ? "Gasto + previsto" : "Gasto"}
+              </p>
               <p className="tabular font-semibold">{formatMoney(overview.totalSpentCents)}</p>
+              {showForecasts && overview.totalForecastCents > 0 && (
+                <p className="text-muted-foreground/80 text-[11px]">
+                  inclui {formatMoney(overview.totalForecastCents)} a vencer
+                </p>
+              )}
             </div>
             <div>
               <p className="text-muted-foreground text-xs uppercase">Disponível</p>
@@ -137,16 +170,39 @@ export function BudgetsView({
         </Card>
       )}
 
-      {overview.budgets.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground text-sm">Nenhum orçamento para {monthLabel}.</p>
-          <div className="mt-3 flex justify-center gap-2">
-            {previousMonthHasData && (
-              <Button variant="outline" onClick={handleCopy} disabled={isCopying}>
-                Copiar do mês anterior
-              </Button>
-            )}
-            <Button onClick={openNew}>Criar primeiro</Button>
+      {isEmpty ? (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground text-sm">
+            Nenhum orçamento para {monthLabel}. Como prefere começar?
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setTreeOpen(true)}
+              className="hover:bg-accent flex flex-col items-center gap-2 rounded-md border p-4 text-center"
+            >
+              <FilePlus className="text-brand size-6" />
+              <span className="text-sm font-medium">Definir do zero</span>
+              <span className="text-muted-foreground text-xs">
+                Lista todas as categorias para você dar um limite a cada uma.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!previousMonthHasData || isCopying}
+              className="hover:bg-accent flex flex-col items-center gap-2 rounded-md border p-4 text-center disabled:opacity-50"
+            >
+              <Copy className="text-brand size-6" />
+              <span className="text-sm font-medium">
+                {isCopying ? "Copiando..." : "Copiar mês anterior"}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {previousMonthHasData
+                  ? "Repete os mesmos limites do mês passado."
+                  : "Sem orçamentos no mês passado para copiar."}
+              </span>
+            </button>
           </div>
         </Card>
       ) : (
@@ -157,13 +213,13 @@ export function BudgetsView({
               budget={b}
               daysElapsed={overview.daysElapsed}
               daysInMonth={overview.daysInMonth}
-              onEdit={() => openEdit(b)}
+              onEdit={() => setTreeOpen(true)}
             />
           ))}
         </Card>
       )}
 
-      {overview.unbudgetedCategoryNames.length > 0 && overview.budgets.length > 0 && (
+      {overview.unbudgetedCategoryNames.length > 0 && !isEmpty && (
         <Card className="p-4">
           <p className="text-muted-foreground text-xs">
             Sem orçamento em {overview.unbudgetedCategoryNames.length}{" "}
@@ -176,12 +232,15 @@ export function BudgetsView({
         </Card>
       )}
 
-      <BudgetForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
+      <BudgetAlertSettings thresholds={budgetAlertThresholds} />
+
+      <BudgetTreeDialog
+        open={treeOpen}
+        onOpenChange={setTreeOpen}
         month={overview.month}
-        existing={editing}
-        categoryOptions={categoryOptions}
+        monthLabel={monthLabel}
+        categories={categoryTree}
+        existingByCategoryId={existingByCategoryId}
       />
     </div>
   );

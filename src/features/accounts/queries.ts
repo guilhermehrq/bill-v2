@@ -35,6 +35,8 @@ export async function listAccountsWithBalances(userId: string): Promise<AccountW
         CASE
           WHEN ${transactions.type} = 'income'  THEN ${transactions.amountCents}
           WHEN ${transactions.type} = 'expense' THEN -${transactions.amountCents}
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.transferDirection} = 'in'  THEN ${transactions.amountCents}
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
           ELSE 0
         END
       ) FILTER (WHERE ${transactions.isPaid} = true), 0)::bigint`,

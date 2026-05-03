@@ -13,6 +13,7 @@ export type BudgetRow = {
   parentName: string | null;
   amountCents: number;
   spentCents: number;
+  forecastCents: number; // unpaid expenses, included in spentCents only when forecasts are on
   pctUsed: number;
 };
 
@@ -23,17 +24,21 @@ export type BudgetsOverview = {
   unbudgetedCategoryNames: string[];
   totalBudgetedCents: number;
   totalSpentCents: number;
+  totalForecastCents: number;
   daysElapsed: number;
   daysInMonth: number;
+  includeForecasts: boolean;
 };
 
 export async function loadBudgetsOverview(
   userId: string,
   month: string, // YYYY-MM-01
   mode: CreditCardReportMode = "purchase_date",
+  options: { includeForecasts?: boolean } = {},
 ): Promise<BudgetsOverview> {
   const monthStart = month;
   const monthEnd = lastDayOfMonth(month);
+  const includeForecasts = options.includeForecasts ?? false;
 
   // Select a single date-bucket expression per mode.
   // The sub-query below filters by this bucket against the budget's month.
@@ -58,7 +63,18 @@ export async function loadBudgetsOverview(
           AND t.is_paid = true
           AND (tc.id = b.category_id OR tc.parent_id = b.category_id)
           AND ${bucketSQL} BETWEEN ${monthStart}::date AND ${monthEnd}::date
-      ), 0)::bigint AS spent_cents
+      ), 0)::bigint AS spent_cents,
+      COALESCE((
+        SELECT SUM(t.amount_cents)
+        FROM transactions t
+        LEFT JOIN categories tc ON tc.id = t.category_id
+        LEFT JOIN credit_card_invoices ci ON ci.id = t.invoice_id
+        WHERE t.user_id = ${userId}
+          AND t.type = 'expense'
+          AND t.is_paid = false
+          AND (tc.id = b.category_id OR tc.parent_id = b.category_id)
+          AND ${bucketSQL} BETWEEN ${monthStart}::date AND ${monthEnd}::date
+      ), 0)::bigint AS forecast_cents
     FROM budgets b
     INNER JOIN categories c ON c.id = b.category_id
     LEFT JOIN categories p ON p.id = c.parent_id
@@ -69,6 +85,8 @@ export async function loadBudgetsOverview(
   const budgetRows: BudgetRow[] = rows.map((r) => {
     const amount = Number(r.amount_cents);
     const spent = Number(r.spent_cents);
+    const forecast = Number(r.forecast_cents);
+    const effectiveSpent = includeForecasts ? spent + forecast : spent;
     return {
       id: r.id as string,
       categoryId: r.category_id as string,
@@ -77,13 +95,15 @@ export async function loadBudgetsOverview(
       categoryIcon: (r.category_icon as string | null) ?? null,
       parentName: (r.parent_name as string | null) ?? null,
       amountCents: amount,
-      spentCents: spent,
-      pctUsed: amount > 0 ? (spent / amount) * 100 : 0,
+      spentCents: effectiveSpent,
+      forecastCents: forecast,
+      pctUsed: amount > 0 ? (effectiveSpent / amount) * 100 : 0,
     };
   });
 
   const totalBudgeted = budgetRows.reduce((acc, b) => acc + b.amountCents, 0);
   const totalSpent = budgetRows.reduce((acc, b) => acc + b.spentCents, 0);
+  const totalForecast = budgetRows.reduce((acc, b) => acc + b.forecastCents, 0);
 
   // Top-level expense categories not yet budgeted this month.
   const budgetedCategoryIds = budgetRows.map((b) => b.categoryId);
@@ -114,8 +134,10 @@ export async function loadBudgetsOverview(
     unbudgetedCategoryNames: unbudgeted.map((c) => c.name),
     totalBudgetedCents: totalBudgeted,
     totalSpentCents: totalSpent,
+    totalForecastCents: totalForecast,
     daysElapsed,
     daysInMonth,
+    includeForecasts,
   };
 }
 

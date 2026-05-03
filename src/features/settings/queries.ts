@@ -23,6 +23,9 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
       density: userSettings.density,
       timezone: userSettings.timezone,
       locale: userSettings.locale,
+      notificationsLastSeenAt: userSettings.notificationsLastSeenAt,
+      budgetAlertThresholds: userSettings.budgetAlertThresholds,
+      showBudgetForecasts: userSettings.showBudgetForecasts,
     })
     .from(userSettings)
     .where(eq(userSettings.userId, userId))
@@ -37,5 +40,10 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
     density: row.density,
     timezone: row.timezone,
     locale: row.locale,
+    notificationsLastSeenAt: row.notificationsLastSeenAt
+      ? row.notificationsLastSeenAt.toISOString()
+      : null,
+    budgetAlertThresholds: (row.budgetAlertThresholds ?? []).map((n) => Number(n)),
+    showBudgetForecasts: row.showBudgetForecasts,
   };
 }

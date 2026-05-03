@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
+import Link from "next/link";
 import { useTransition } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -51,15 +52,13 @@ export function UserMenu({ name, email, avatarUrl }: Props) {
           <span className="text-muted-foreground truncate text-xs font-normal">{email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem render={<Link href="/perfil" />}>
           <UserIcon />
           Perfil
-          <span className="text-muted-foreground/70 ml-auto text-[10px]">F5</span>
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem render={<Link href="/configuracoes" />}>
           <SettingsIcon />
           Configurações
-          <span className="text-muted-foreground/70 ml-auto text-[10px]">F5</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout} variant="destructive">

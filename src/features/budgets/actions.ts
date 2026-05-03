@@ -1,13 +1,15 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { budgets } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import {
+  bulkUpsertBudgetsSchema,
   copyBudgetsSchema,
   upsertBudgetSchema,
+  type BulkUpsertBudgetsInput,
   type CopyBudgetsInput,
   type UpsertBudgetInput,
 } from "./schemas";
@@ -67,6 +69,65 @@ export async function deleteBudgetAction(id: string): Promise<ActionResult> {
 
   revalidate();
   return { ok: true, data: undefined };
+}
+
+export async function bulkUpsertBudgetsAction(
+  input: BulkUpsertBudgetsInput,
+): Promise<ActionResult<{ saved: number; deleted: number }>> {
+  const parsed = bulkUpsertBudgetsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.errors[0]?.message ?? "Dados inválidos" };
+  }
+
+  const uid = await requireUserId();
+  if (typeof uid !== "string") return { ok: false, error: uid.error };
+
+  const toUpsert = parsed.data.entries.filter((e) => e.amountCents > 0);
+  const toDelete = parsed.data.entries.filter((e) => e.amountCents === 0);
+
+  let saved = 0;
+  let deleted = 0;
+
+  if (toUpsert.length > 0) {
+    const values = toUpsert.map((e) => ({
+      userId: uid,
+      categoryId: e.categoryId,
+      month: parsed.data.month,
+      amountCents: e.amountCents,
+    }));
+    const result = await db
+      .insert(budgets)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [budgets.userId, budgets.categoryId, budgets.month],
+        set: {
+          amountCents: sql`EXCLUDED.amount_cents`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ id: budgets.id });
+    saved = result.length;
+  }
+
+  if (toDelete.length > 0) {
+    const result = await db
+      .delete(budgets)
+      .where(
+        and(
+          eq(budgets.userId, uid),
+          eq(budgets.month, parsed.data.month),
+          inArray(
+            budgets.categoryId,
+            toDelete.map((e) => e.categoryId),
+          ),
+        ),
+      )
+      .returning({ id: budgets.id });
+    deleted = result.length;
+  }
+
+  revalidate();
+  return { ok: true, data: { saved, deleted } };
 }
 
 export async function copyBudgetsFromMonthAction(

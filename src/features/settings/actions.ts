@@ -36,6 +36,13 @@ export async function updateUserSettingsAction(input: UpdateSettingsInput): Prom
   }
   if (parsed.data.theme !== undefined) updates.theme = parsed.data.theme;
   if (parsed.data.density !== undefined) updates.density = parsed.data.density;
+  if (parsed.data.budgetAlertThresholds !== undefined) {
+    const sorted = [...new Set(parsed.data.budgetAlertThresholds)].sort((a, b) => a - b);
+    updates.budgetAlertThresholds = sorted;
+  }
+  if (parsed.data.showBudgetForecasts !== undefined) {
+    updates.showBudgetForecasts = parsed.data.showBudgetForecasts;
+  }
 
   const result = await db
     .update(userSettings)

@@ -4,6 +4,7 @@ import { BottomNav } from "@/features/nav/bottom-nav";
 import { KeyboardShortcuts } from "@/features/nav/keyboard-shortcuts";
 import { Sidebar } from "@/features/nav/sidebar";
 import { Topbar } from "@/features/nav/topbar";
+import { loadNotifications } from "@/features/notifications/queries";
 import { getUserSettings } from "@/features/settings/queries";
 import { ThemeApplier } from "@/features/settings/theme-applier";
 import { listFormAccountOptions, listFormCategoryOptions } from "@/features/transactions/queries";
@@ -28,6 +29,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     getUserSettings(user.id),
   ]);
 
+  const notifications = await loadNotifications(user.id, {
+    notificationsLastSeenAt: settings.notificationsLastSeenAt,
+    budgetAlertThresholds: settings.budgetAlertThresholds,
+    creditCardReportMode: settings.creditCardReportMode,
+  });
+
   return (
     <div className="bg-background min-h-dvh">
       <Topbar
@@ -36,6 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           email: user.email ?? "",
           avatarUrl: metadata.avatar_url ?? null,
         }}
+        notifications={{ unread: notifications.unread, unreadCount: notifications.unreadCount }}
       />
       <Sidebar />
       <main className="flex-1 pt-4 pb-20 lg:pb-6 lg:pl-60">

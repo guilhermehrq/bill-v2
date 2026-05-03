@@ -8,7 +8,12 @@ export type UserSettings = {
   density: "comfortable" | "compact";
   timezone: string;
   locale: string;
+  notificationsLastSeenAt: string | null;
+  budgetAlertThresholds: number[];
+  showBudgetForecasts: boolean;
 };
+
+export const DEFAULT_BUDGET_ALERT_THRESHOLDS: readonly number[] = [50, 80, 100];
 
 export const DEFAULT_SETTINGS: UserSettings = {
   creditCardReportMode: "purchase_date",
@@ -17,6 +22,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   density: "comfortable",
   timezone: "America/Sao_Paulo",
   locale: "pt-BR",
+  notificationsLastSeenAt: null,
+  budgetAlertThresholds: [...DEFAULT_BUDGET_ALERT_THRESHOLDS],
+  showBudgetForecasts: false,
 };
 
 export const STATEMENT_VIEW_MODE_LABELS: Record<

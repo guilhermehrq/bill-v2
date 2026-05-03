@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { BudgetTreeCategory } from "@/features/budgets/budget-tree-dialog";
 import { BudgetsView } from "@/features/budgets/budgets-view";
 import { listMonthsWithBudgets, loadBudgetsOverview } from "@/features/budgets/queries";
 import { listCategoriesWithCounts } from "@/features/categories/queries";
@@ -24,33 +25,30 @@ export default async function OrcamentosPage({ searchParams }: { searchParams: S
 
   const settings = await getUserSettings(user.id);
   const [overview, categoryNodes, months] = await Promise.all([
-    loadBudgetsOverview(user.id, month, settings.creditCardReportMode),
+    loadBudgetsOverview(user.id, month, settings.creditCardReportMode, {
+      includeForecasts: settings.showBudgetForecasts,
+    }),
     listCategoriesWithCounts(user.id),
     listMonthsWithBudgets(user.id),
   ]);
 
-  const categoryOptions = categoryNodes
-    .filter((n) => n.type === "expense" && !n.archivedAt)
-    .flatMap((n) => [
-      {
-        id: n.id,
-        name: n.name,
-        parentName: null as string | null,
-        icon: n.icon,
-        color: n.color,
-        parentColor: null as string | null,
-      },
-      ...n.children
-        .filter((c) => !c.archivedAt)
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          parentName: n.name,
-          icon: c.icon,
-          color: c.color,
-          parentColor: n.color,
-        })),
-    ]);
+  const categoryTree: BudgetTreeCategory[] = categoryNodes
+    .filter((n) => n.type === "expense")
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      icon: n.icon,
+      color: n.color,
+      type: n.type,
+      archivedAt: n.archivedAt,
+      children: n.children.map((c) => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+        color: c.color,
+        archivedAt: c.archivedAt,
+      })),
+    }));
 
   const previousMonthHasData = months.includes(prev);
 
@@ -58,10 +56,12 @@ export default async function OrcamentosPage({ searchParams }: { searchParams: S
     <div className="py-4">
       <BudgetsView
         overview={overview}
-        categoryOptions={categoryOptions}
+        categoryTree={categoryTree}
         previousMonth={prev}
         previousMonthHasData={previousMonthHasData}
         creditCardMode={settings.creditCardReportMode}
+        showForecasts={settings.showBudgetForecasts}
+        budgetAlertThresholds={settings.budgetAlertThresholds}
       />
     </div>
   );
