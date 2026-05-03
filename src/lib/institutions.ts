@@ -1,4 +1,4 @@
-import raw from "../../instituicoes.json";
+import raw from "../../artefatos/instituicoes.json";
 
 export type Institution = {
   slug: string;
