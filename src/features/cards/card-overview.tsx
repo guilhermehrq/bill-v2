@@ -4,6 +4,11 @@ import { AccountIcon } from "@/components/ui/account-icon";
 import { Card } from "@/components/ui/card";
 import { format } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import {
+  deriveInvoiceStatus,
+  INVOICE_STATUS_LABEL,
+  type DerivedInvoiceStatus,
+} from "./invoice-status";
 import type { InvoiceNavItem } from "./invoice-queries";
 
 type CardSummary = {
@@ -23,20 +28,12 @@ type Props = {
   year: number;
 };
 
-const STATUS_LABEL: Record<InvoiceNavItem["status"], string> = {
-  open: "Aberta",
-  closed: "Fechada",
-  paid: "Paga",
-  overdue: "Atrasada",
-  partial: "Parcial",
-};
-
-const STATUS_TONE: Record<InvoiceNavItem["status"], string> = {
-  open: "border-info/40 bg-info/5 text-info",
-  closed: "border-pending/40 bg-pending/5 text-pending",
+const STATUS_TONE: Record<DerivedInvoiceStatus, string> = {
   paid: "border-income/40 bg-income/5 text-income",
-  overdue: "border-expense/40 bg-expense/5 text-expense",
   partial: "border-pending/40 bg-pending/5 text-pending",
+  current: "border-info/40 bg-info/5 text-info",
+  future: "border-muted-foreground/30 bg-muted/30 text-muted-foreground",
+  overdue: "border-expense/40 bg-expense/5 text-expense",
 };
 
 const MONTH_NAMES = [
@@ -120,6 +117,7 @@ export function CardOverview({ card, invoices, year }: Props) {
               <InvoiceTile
                 key={monthKey}
                 cardId={card.id}
+                closingDay={card.closingDay}
                 year={year}
                 monthIndex={i}
                 invoice={inv ?? null}
@@ -134,11 +132,13 @@ export function CardOverview({ card, invoices, year }: Props) {
 
 function InvoiceTile({
   cardId,
+  closingDay,
   year,
   monthIndex,
   invoice,
 }: {
   cardId: string;
+  closingDay: number;
   year: number;
   monthIndex: number;
   invoice: InvoiceNavItem | null;
@@ -156,8 +156,16 @@ function InvoiceTile({
     );
   }
 
-  const tone = STATUS_TONE[invoice.status];
-  const label = STATUS_LABEL[invoice.status];
+  const derived = deriveInvoiceStatus(
+    {
+      paidCents: invoice.paidCents,
+      totalCents: invoice.totalCents,
+      referenceMonth: invoice.referenceMonth,
+    },
+    closingDay,
+  );
+  const tone = STATUS_TONE[derived];
+  const label = INVOICE_STATUS_LABEL[derived];
 
   return (
     <Link

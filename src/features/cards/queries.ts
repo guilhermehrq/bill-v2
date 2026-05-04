@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, creditCardInvoices, creditCards } from "@/db/schema";
 
@@ -51,8 +51,8 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
 
   if (rows.length === 0) return [];
 
-  // Grab current open invoice per card — the one whose closing_date >= today
-  // and reference_month is the latest <= today + 1 month (current cycle).
+  // Grab the current invoice per card — the one whose closing_date is the
+  // EARLIEST date >= today (i.e. the next/active billing cycle).
   const invoiceRows = await db
     .select({
       id: creditCardInvoices.id,
@@ -70,12 +70,12 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
         sql`${creditCardInvoices.closingDate} >= ${today}`,
       ),
     )
-    .orderBy(desc(creditCardInvoices.closingDate));
+    .orderBy(creditCardInvoices.closingDate); // ascending: smallest first
 
-  // Pick the first (earliest closing date >= today) per card.
+  // First seen per card is the earliest closing_date >= today.
   const currentByCard = new Map<string, (typeof invoiceRows)[number]>();
-  for (const inv of [...invoiceRows].reverse()) {
-    currentByCard.set(inv.cardId, inv);
+  for (const inv of invoiceRows) {
+    if (!currentByCard.has(inv.cardId)) currentByCard.set(inv.cardId, inv);
   }
 
   return rows.map((r) => {

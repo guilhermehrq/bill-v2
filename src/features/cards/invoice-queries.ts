@@ -43,6 +43,7 @@ export type InvoiceNavItem = {
   id: string;
   referenceMonth: string;
   totalCents: number;
+  paidCents: number;
   status: "open" | "closed" | "paid" | "overdue" | "partial";
 };
 
@@ -170,6 +171,7 @@ export async function listInvoicesForCard(
       id: creditCardInvoices.id,
       referenceMonth: creditCardInvoices.referenceMonth,
       totalCents: creditCardInvoices.totalCents,
+      paidCents: creditCardInvoices.paidCents,
       status: creditCardInvoices.status,
     })
     .from(creditCardInvoices)
@@ -180,6 +182,7 @@ export async function listInvoicesForCard(
     id: r.id,
     referenceMonth: r.referenceMonth,
     totalCents: Number(r.totalCents),
+    paidCents: Number(r.paidCents),
     status: r.status,
   }));
 }
@@ -195,6 +198,7 @@ export async function listOpenInvoicesForCard(
       id: creditCardInvoices.id,
       referenceMonth: creditCardInvoices.referenceMonth,
       totalCents: creditCardInvoices.totalCents,
+      paidCents: creditCardInvoices.paidCents,
       status: creditCardInvoices.status,
     })
     .from(creditCardInvoices)
@@ -211,6 +215,7 @@ export async function listOpenInvoicesForCard(
     id: r.id,
     referenceMonth: r.referenceMonth,
     totalCents: Number(r.totalCents),
+    paidCents: Number(r.paidCents),
     status: r.status,
   }));
 }

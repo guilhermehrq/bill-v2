@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { format } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { InvoiceDetail, InvoiceNavItem } from "./invoice-queries";
+import { deriveInvoiceStatus, INVOICE_STATUS_LABEL } from "./invoice-status";
 import { PayInvoiceDialog } from "./pay-invoice-dialog";
 
 type Props = {
@@ -25,15 +26,15 @@ type Props = {
   accounts: Array<{ id: string; name: string }>;
 };
 
-const STATUS_LABELS: Record<
-  string,
-  { label: string; tone: "default" | "income" | "expense" | "pending" }
+const STATUS_TONE: Record<
+  ReturnType<typeof deriveInvoiceStatus>,
+  "default" | "income" | "expense" | "pending"
 > = {
-  open: { label: "Aberta", tone: "default" },
-  closed: { label: "Fechada", tone: "pending" },
-  paid: { label: "Paga", tone: "income" },
-  overdue: { label: "Atrasada", tone: "expense" },
-  partial: { label: "Parcialmente paga", tone: "pending" },
+  paid: "income",
+  partial: "pending",
+  current: "default",
+  future: "default",
+  overdue: "expense",
 };
 
 export function InvoiceDetailView({ invoice, card, currentMonth, invoices, accounts }: Props) {
@@ -121,16 +122,29 @@ export function InvoiceDetailView({ invoice, card, currentMonth, invoices, accou
             </Card>
             <Card className="p-4">
               <p className="text-muted-foreground text-xs uppercase">Status</p>
-              <p
-                className={cn(
-                  "text-base font-semibold",
-                  STATUS_LABELS[invoice.status]?.tone === "income" && "text-income",
-                  STATUS_LABELS[invoice.status]?.tone === "expense" && "text-expense",
-                  STATUS_LABELS[invoice.status]?.tone === "pending" && "text-pending",
-                )}
-              >
-                {STATUS_LABELS[invoice.status]?.label ?? invoice.status}
-              </p>
+              {(() => {
+                const derived = deriveInvoiceStatus(
+                  {
+                    paidCents: invoice.paidCents,
+                    totalCents: invoice.totalCents,
+                    referenceMonth: invoice.referenceMonth,
+                  },
+                  card.closingDay,
+                );
+                const tone = STATUS_TONE[derived];
+                return (
+                  <p
+                    className={cn(
+                      "text-base font-semibold",
+                      tone === "income" && "text-income",
+                      tone === "expense" && "text-expense",
+                      tone === "pending" && "text-pending",
+                    )}
+                  >
+                    {INVOICE_STATUS_LABEL[derived]}
+                  </p>
+                );
+              })()}
               {invoice.paidCents > 0 && (
                 <p className="text-muted-foreground text-xs">
                   {format(invoice.paidCents)} pagos · {format(remaining)} devido
