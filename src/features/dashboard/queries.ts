@@ -99,6 +99,9 @@ export async function loadDashboard(
 
   // Open invoices total (open + closed + partial + overdue, NOT paid).
   // Sum of remaining = totalCents - paidCents.
+  // Excludes invoices for future billing cycles (reference_month > current month):
+  // those represent parcels not yet charged and would inflate "fatura acumulada"
+  // beyond what is actually owed today.
   const [openInvoicesRow] = (await db
     .select({
       total: sql<number>`COALESCE(SUM(${creditCardInvoices.totalCents} - ${creditCardInvoices.paidCents}), 0)::bigint`,
@@ -110,6 +113,7 @@ export async function loadDashboard(
         eq(creditCardInvoices.userId, userId),
         sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
         sql`${creditCardInvoices.totalCents} > ${creditCardInvoices.paidCents}`,
+        lte(creditCardInvoices.referenceMonth, currentMonthStart),
       ),
     )) as [{ total: number | string; count: number }];
 
