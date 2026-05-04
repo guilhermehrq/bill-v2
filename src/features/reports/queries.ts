@@ -86,6 +86,9 @@ export async function loadReportData(
   const incomeCents = Number(summaryRow?.income ?? 0);
   const expenseCents = Number(summaryRow?.expense ?? 0);
 
+  // No alias on transactions/credit_card_invoices: bucketDateExpr references
+  // them by their full names (transactions.date, credit_card_invoices.reference_month),
+  // so aliasing here would produce "invalid reference to FROM-clause entry".
   const byCategoryRows = await db.execute(sql`
     SELECT
       c.id AS category_id,
@@ -93,18 +96,18 @@ export async function loadReportData(
       c.name AS name,
       c.color AS color,
       p.name AS parent_name,
-      SUM(t.amount_cents)::bigint AS total_cents,
+      SUM(transactions.amount_cents)::bigint AS total_cents,
       COUNT(*)::int AS count
-    FROM transactions t
-    LEFT JOIN categories c ON c.id = t.category_id
+    FROM transactions
+    LEFT JOIN categories c ON c.id = transactions.category_id
     LEFT JOIN categories p ON p.id = c.parent_id
-    LEFT JOIN credit_card_invoices ci ON ci.id = t.invoice_id
-    WHERE t.user_id = ${userId}
-      AND t.is_paid = true
-      AND t.type = 'expense'
+    LEFT JOIN credit_card_invoices ON credit_card_invoices.id = transactions.invoice_id
+    WHERE transactions.user_id = ${userId}
+      AND transactions.is_paid = true
+      AND transactions.type = 'expense'
       AND ${bucket} BETWEEN ${from}::date AND ${to}::date
     GROUP BY c.id, c.parent_id, c.name, c.color, p.name
-    ORDER BY SUM(t.amount_cents) DESC
+    ORDER BY SUM(transactions.amount_cents) DESC
   `);
 
   const byCategory: CategoryRow[] = byCategoryRows.map((r) => ({
