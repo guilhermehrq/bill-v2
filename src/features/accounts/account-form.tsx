@@ -136,7 +136,11 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4">
+        <form
+          id="account-form"
+          onSubmit={handleSubmit(onSubmit)}
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4"
+        >
           {formError && (
             <Alert variant="destructive">
               <AlertDescription>{formError}</AlertDescription>
@@ -240,16 +244,16 @@ export function AccountForm({ open, onOpenChange, account, onSaved }: Props) {
               </div>
             </div>
           </div>
-
-          <SheetFooter className="mt-4 flex-row justify-end gap-2 px-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar conta"}
-            </Button>
-          </SheetFooter>
         </form>
+
+        <SheetFooter className="flex-row justify-end gap-2 border-t">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="account-form" disabled={isPending}>
+            {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar conta"}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

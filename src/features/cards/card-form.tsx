@@ -123,7 +123,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{isEdit ? "Editar cartão" : "Novo cartão"}</SheetTitle>
           <SheetDescription>
@@ -131,7 +131,7 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-4 px-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -248,16 +248,16 @@ export function CardForm({ open, onOpenChange, card, accounts }: Props) {
               ))}
             </div>
           </div>
-
-          <SheetFooter className="mt-4 flex-row justify-end gap-2 px-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={handleSubmit} disabled={isPending}>
-              {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar cartão"}
-            </Button>
-          </SheetFooter>
         </div>
+
+        <SheetFooter className="flex-row justify-end gap-2 border-t">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={isPending}>
+            {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar cartão"}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

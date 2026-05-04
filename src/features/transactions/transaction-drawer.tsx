@@ -310,7 +310,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && close()}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{editingId ? "Editar transação" : "Nova transação"}</SheetTitle>
           <SheetDescription>
@@ -318,7 +318,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-4 px-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
           {!editingId && (
             <div className="grid grid-cols-3 gap-1 rounded-md border p-1">
               {(["expense", "income", "transfer"] as const).map((t) => (
@@ -697,16 +697,16 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
-
-          <SheetFooter className="mt-4 flex-row justify-end gap-2 px-0">
-            <Button type="button" variant="outline" onClick={close}>
-              Cancelar
-            </Button>
-            <Button type="button" onClick={handleSubmit} disabled={isPending}>
-              {isPending ? "Salvando..." : editingId ? "Salvar" : "Criar"}
-            </Button>
-          </SheetFooter>
         </div>
+
+        <SheetFooter className="flex-row justify-end gap-2 border-t">
+          <Button type="button" variant="outline" onClick={close}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={isPending}>
+            {isPending ? "Salvando..." : editingId ? "Salvar" : "Criar"}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
