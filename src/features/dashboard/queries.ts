@@ -90,6 +90,7 @@ export async function loadDashboard(
         eq(accounts.archived, false),
         eq(accounts.includeInTotalBalance, true),
         eq(transactions.isPaid, true),
+        lte(transactions.date, today),
       ),
     )) as [{ delta: number | string }];
 

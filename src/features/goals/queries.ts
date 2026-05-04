@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, goals, transactions } from "@/db/schema";
 
@@ -44,6 +44,7 @@ export async function listGoals(userId: string): Promise<GoalRow[]> {
   // For account-backed goals we recompute `current` from the linked account's
   // balance. For manual goals, `current_cents` stored on the row is the truth.
   const linkedAccountIds = rows.map((r) => r.accountId).filter((id): id is string => id !== null);
+  const today = isoDate(new Date());
 
   const balanceDeltas = linkedAccountIds.length
     ? await db
@@ -64,6 +65,7 @@ export async function listGoals(userId: string): Promise<GoalRow[]> {
           and(
             eq(transactions.userId, userId),
             eq(transactions.isPaid, true),
+            lte(transactions.date, today),
             sql`${transactions.accountId} = ANY(${linkedAccountIds})`,
           ),
         )

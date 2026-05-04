@@ -19,6 +19,7 @@ export type AccountWithBalance = {
 };
 
 export async function listAccountsWithBalances(userId: string): Promise<AccountWithBalance[]> {
+  const today = isoDate(new Date());
   const rows = await db
     .select({
       id: accounts.id,
@@ -39,7 +40,7 @@ export async function listAccountsWithBalances(userId: string): Promise<AccountW
           WHEN ${transactions.type} = 'transfer' AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
           ELSE 0
         END
-      ) FILTER (WHERE ${transactions.isPaid} = true), 0)::bigint`,
+      ) FILTER (WHERE ${transactions.isPaid} = true AND ${transactions.date} <= ${today}::date), 0)::bigint`,
       transactionCount: sql<number>`COUNT(${transactions.id})::int`,
     })
     .from(accounts)
@@ -65,6 +66,10 @@ export async function listAccountsWithBalances(userId: string): Promise<AccountW
     balanceCents: Number(r.initialBalanceCents) + Number(r.balanceDelta),
     transactionCount: Number(r.transactionCount),
   }));
+}
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export async function getAccount(userId: string, id: string) {
