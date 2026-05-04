@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -73,7 +74,9 @@ export function CreditCardModeSelector({ currentMode, variant = "badge", classNa
         <ChevronDown className={variant === "badge" ? "size-3" : "size-3 opacity-60"} aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel>Modo de exibição de cartão</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Modo de exibição de cartão</DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={currentMode} onValueChange={handleChange}>
           {MODES.map((m) => {
