@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { budgets, categories } from "@/db/schema";
 import type { CreditCardReportMode } from "@/features/settings/queries";
@@ -10,6 +10,7 @@ export type BudgetRow = {
   categoryName: string;
   categoryColor: string | null;
   categoryIcon: string | null;
+  parentCategoryId: string | null; // null when this row is itself a top-level category
   parentName: string | null;
   amountCents: number;
   spentCents: number;
@@ -17,9 +18,27 @@ export type BudgetRow = {
   pctUsed: number;
 };
 
+// One group per top-level expense category that has any budget (own or in a child).
+// Used by the view to render a parent row with its budgeted children indented
+// below, and to compute non-double-counted totals.
+export type BudgetGroup = {
+  parentCategoryId: string;
+  parentCategoryName: string;
+  parentCategoryColor: string | null;
+  parentCategoryIcon: string | null;
+  parentRow: BudgetRow | null; // present if user explicitly budgeted the parent
+  children: BudgetRow[];
+  // Effective totals for the group (parent + children, no double count).
+  budgetedCents: number;
+  spentCents: number;
+  forecastCents: number;
+  pctUsed: number;
+};
+
 export type BudgetsOverview = {
   month: string; // YYYY-MM-01
   budgets: BudgetRow[];
+  groups: BudgetGroup[];
   unbudgetedCategoryIds: string[];
   unbudgetedCategoryNames: string[];
   totalBudgetedCents: number;
@@ -51,6 +70,7 @@ export async function loadBudgetsOverview(
       c.name AS category_name,
       c.color AS category_color,
       c.icon AS category_icon,
+      c.parent_id AS parent_category_id,
       p.name AS parent_name,
       b.amount_cents::bigint AS amount_cents,
       COALESCE((
@@ -93,6 +113,7 @@ export async function loadBudgetsOverview(
       categoryName: r.category_name as string,
       categoryColor: (r.category_color as string | null) ?? null,
       categoryIcon: (r.category_icon as string | null) ?? null,
+      parentCategoryId: (r.parent_category_id as string | null) ?? null,
       parentName: (r.parent_name as string | null) ?? null,
       amountCents: amount,
       spentCents: effectiveSpent,
@@ -101,9 +122,100 @@ export async function loadBudgetsOverview(
     };
   });
 
-  const totalBudgeted = budgetRows.reduce((acc, b) => acc + b.amountCents, 0);
-  const totalSpent = budgetRows.reduce((acc, b) => acc + b.spentCents, 0);
-  const totalForecast = budgetRows.reduce((acc, b) => acc + b.forecastCents, 0);
+  // Group rows by their top-level parent so the view can render a hierarchy
+  // and totals can avoid double-counting (a parent budget's spent already
+  // includes its children's transactions, per the SQL above).
+  const parentByCategoryId = new Map<string, BudgetRow>();
+  const childrenByParentId = new Map<string, BudgetRow[]>();
+  for (const row of budgetRows) {
+    if (row.parentCategoryId === null) {
+      parentByCategoryId.set(row.categoryId, row);
+    } else {
+      const list = childrenByParentId.get(row.parentCategoryId) ?? [];
+      list.push(row);
+      childrenByParentId.set(row.parentCategoryId, list);
+    }
+  }
+
+  const groupKeys = new Set<string>([...parentByCategoryId.keys(), ...childrenByParentId.keys()]);
+
+  const groups: BudgetGroup[] = [];
+  for (const parentId of groupKeys) {
+    const parent = parentByCategoryId.get(parentId) ?? null;
+    const children = (childrenByParentId.get(parentId) ?? []).sort((a, b) =>
+      a.categoryName.localeCompare(b.categoryName, "pt-BR"),
+    );
+
+    const childrenBudgeted = children.reduce((s, c) => s + c.amountCents, 0);
+    const budgetedCents = (parent?.amountCents ?? 0) + childrenBudgeted;
+
+    // Parent's spent already aggregates all children's transactions (whether
+    // they have their own budget or not). When the parent has no budget row,
+    // we fall back to summing the children's spent.
+    const spentCents = parent ? parent.spentCents : children.reduce((s, c) => s + c.spentCents, 0);
+    const forecastCents = parent
+      ? parent.forecastCents
+      : children.reduce((s, c) => s + c.forecastCents, 0);
+
+    // Resolve display info for the parent category from either source.
+    const meta = parent
+      ? {
+          name: parent.categoryName,
+          color: parent.categoryColor,
+          icon: parent.categoryIcon,
+        }
+      : children[0]
+        ? {
+            name: children[0].parentName ?? "Sem categoria",
+            color: null,
+            icon: null,
+          }
+        : { name: "Sem categoria", color: null, icon: null };
+
+    groups.push({
+      parentCategoryId: parentId,
+      parentCategoryName: meta.name,
+      parentCategoryColor: meta.color,
+      parentCategoryIcon: meta.icon,
+      parentRow: parent,
+      children,
+      budgetedCents,
+      spentCents,
+      forecastCents,
+      pctUsed: budgetedCents > 0 ? (spentCents / budgetedCents) * 100 : 0,
+    });
+  }
+
+  // If the parent has no budget, we look up its display info (name/icon/color)
+  // from a separate query, since our budget rows wouldn't carry it.
+  const orphanParentIds = groups.filter((g) => !g.parentRow).map((g) => g.parentCategoryId);
+  if (orphanParentIds.length > 0) {
+    const parentMeta = await db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        color: categories.color,
+        icon: categories.icon,
+      })
+      .from(categories)
+      .where(and(eq(categories.userId, userId), inArray(categories.id, orphanParentIds)));
+    const metaById = new Map(parentMeta.map((m) => [m.id, m]));
+    for (const g of groups) {
+      if (g.parentRow) continue;
+      const meta = metaById.get(g.parentCategoryId);
+      if (meta) {
+        g.parentCategoryName = meta.name;
+        g.parentCategoryColor = meta.color ?? null;
+        g.parentCategoryIcon = meta.icon ?? null;
+      }
+    }
+  }
+
+  groups.sort((a, b) => a.parentCategoryName.localeCompare(b.parentCategoryName, "pt-BR"));
+
+  const totalBudgeted = groups.reduce((acc, g) => acc + g.budgetedCents, 0);
+  const totalSpent = groups.reduce((acc, g) => acc + g.spentCents, 0);
+  const totalForecast = groups.reduce((acc, g) => acc + g.forecastCents, 0);
 
   // Top-level expense categories not yet budgeted this month.
   const budgetedCategoryIds = budgetRows.map((b) => b.categoryId);
@@ -130,6 +242,7 @@ export async function loadBudgetsOverview(
   return {
     month: monthStart,
     budgets: budgetRows,
+    groups,
     unbudgetedCategoryIds: unbudgeted.map((c) => c.id),
     unbudgetedCategoryNames: unbudgeted.map((c) => c.name),
     totalBudgetedCents: totalBudgeted,

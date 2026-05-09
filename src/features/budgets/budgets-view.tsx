@@ -12,8 +12,8 @@ import type { CreditCardReportMode } from "@/features/settings/queries";
 import { updateUserSettingsAction } from "@/features/settings/actions";
 import { copyBudgetsFromMonthAction } from "./actions";
 import { BudgetAlertSettings } from "./budget-alert-settings";
+import { BudgetGroupCard } from "./budget-group-card";
 import { BudgetTreeDialog, type BudgetTreeCategory } from "./budget-tree-dialog";
-import { BudgetProgressRow } from "./budget-progress-row";
 import type { BudgetsOverview } from "./queries";
 
 type Props = {
@@ -206,17 +206,17 @@ export function BudgetsView({
           </div>
         </Card>
       ) : (
-        <Card className="space-y-4 p-4">
-          {overview.budgets.map((b) => (
-            <BudgetProgressRow
-              key={b.id}
-              budget={b}
+        <div className="space-y-3">
+          {overview.groups.map((g) => (
+            <BudgetGroupCard
+              key={g.parentCategoryId}
+              group={g}
               daysElapsed={overview.daysElapsed}
               daysInMonth={overview.daysInMonth}
               onEdit={() => setTreeOpen(true)}
             />
           ))}
-        </Card>
+        </div>
       )}
 
       {overview.unbudgetedCategoryNames.length > 0 && !isEmpty && (

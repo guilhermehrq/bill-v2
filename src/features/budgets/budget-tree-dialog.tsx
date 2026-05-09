@@ -216,6 +216,11 @@ function CategoryNodeRow({
   onRemove: (id: string) => void;
   onChangeAmount: (id: string, cents: number) => void;
 }) {
+  const parentValue = Math.max(0, drafts[node.id] ?? 0);
+  const childrenSum = node.children.reduce((s, c) => s + Math.max(0, drafts[c.id] ?? 0), 0);
+  const groupTotal = parentValue + childrenSum;
+  const showSubtotal = node.children.length > 0 && groupTotal > 0;
+
   return (
     <div className="rounded-md border">
       <CategoryEditableRow
@@ -228,6 +233,11 @@ function CategoryNodeRow({
         onOpen={onOpen}
         onRemove={onRemove}
         onChangeAmount={onChangeAmount}
+        subtitle={
+          showSubtotal
+            ? `Total da categoria: ${formatMoney(groupTotal)}${childrenSum > 0 ? ` (${formatMoney(childrenSum)} em subcategorias)` : ""}`
+            : null
+        }
       />
       {node.children.length > 0 && (
         <div className="border-t">
@@ -264,6 +274,7 @@ function CategoryEditableRow({
   onRemove,
   onChangeAmount,
   indent = false,
+  subtitle = null,
 }: {
   id: string;
   name: string;
@@ -275,6 +286,7 @@ function CategoryEditableRow({
   onRemove: (id: string) => void;
   onChangeAmount: (id: string, cents: number) => void;
   indent?: boolean;
+  subtitle?: string | null;
 }) {
   const Icon = getIconComponent(icon);
   const c = color ?? "#6366f1";
@@ -298,9 +310,10 @@ function CategoryEditableRow({
           <span className="block size-1.5 rounded-full" style={{ backgroundColor: c }} />
         )}
       </span>
-      <span className={cn("flex-1 truncate text-sm", indent && "text-muted-foreground")}>
-        {name}
-      </span>
+      <div className="min-w-0 flex-1">
+        <p className={cn("truncate text-sm", indent && "text-muted-foreground")}>{name}</p>
+        {subtitle && <p className="text-muted-foreground truncate text-[11px]">{subtitle}</p>}
+      </div>
       {hasInput ? (
         <div className="flex items-center gap-1">
           <MoneyInput
