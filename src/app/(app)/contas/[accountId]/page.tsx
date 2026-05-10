@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, List } from "lucide-react";
+import { ArrowLeft, BarChart3, ChevronLeft, ChevronRight, List } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AccountIcon } from "@/components/ui/account-icon";
@@ -13,9 +13,17 @@ import { createClient } from "@/lib/supabase/server";
 export const metadata = { title: "Conta · FinPessoal" };
 
 type Params = Promise<{ accountId: string }>;
+type SearchParams = Promise<{ mes?: string }>;
 
-export default async function AccountDetailPage({ params }: { params: Params }) {
+export default async function AccountDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const { accountId } = await params;
+  const { mes } = await searchParams;
 
   const supabase = await createClient();
   const {
@@ -29,7 +37,15 @@ export default async function AccountDetailPage({ params }: { params: Params }) 
 
   const typeLabel = ACCOUNT_TYPES.find((t) => t.value === account.type)?.label ?? account.type;
 
-  const { items: recent } = await searchTransactions(user.id, { accountIds: [accountId] }, 0);
+  const monthKey = isValidMonthKey(mes) ? mes! : currentMonthKey();
+  const { from, to } = monthRange(monthKey);
+  const monthLabel = formatMonthLabel(monthKey);
+
+  const { items: recent, total } = await searchTransactions(
+    user.id,
+    { accountIds: [accountId], from, to },
+    0,
+  );
 
   const isNegative = account.balanceCents < 0;
 
@@ -98,18 +114,95 @@ export default async function AccountDetailPage({ params }: { params: Params }) 
         </Link>
       </div>
 
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-medium">Últimas transações</h2>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-medium">Transações de {monthLabel}</h2>
           <Link
             href={`/extrato?account=${account.id}`}
             className="text-muted-foreground hover:text-foreground text-xs"
           >
-            Ver todas
+            Ver no extrato
           </Link>
         </div>
-        <TransactionsList items={recent.slice(0, 15)} />
+
+        <div className="flex items-center gap-1">
+          <Link
+            href={`/contas/${account.id}?mes=${prevMonthKey(monthKey)}`}
+            aria-label="Mês anterior"
+            className="hover:bg-accent inline-flex size-9 items-center justify-center rounded-md"
+          >
+            <ChevronLeft className="size-4" />
+          </Link>
+          <span className="tabular px-3 text-sm font-medium">{monthLabel}</span>
+          <Link
+            href={`/contas/${account.id}?mes=${nextMonthKey(monthKey)}`}
+            aria-label="Próximo mês"
+            className="hover:bg-accent inline-flex size-9 items-center justify-center rounded-md"
+          >
+            <ChevronRight className="size-4" />
+          </Link>
+          <span className="text-muted-foreground ml-2 text-xs">
+            {total} {total === 1 ? "transação" : "transações"}
+          </span>
+        </div>
+
+        {recent.length === 0 ? (
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground text-sm">Nenhuma transação em {monthLabel}.</p>
+          </Card>
+        ) : (
+          <TransactionsList items={recent} />
+        )}
       </section>
     </div>
   );
+}
+
+function isValidMonthKey(value: string | undefined): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+}
+
+function currentMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthRange(monthKey: string): { from: string; to: string } {
+  const [y, m] = monthKey.split("-").map(Number) as [number, number];
+  const last = new Date(y, m, 0).getDate();
+  return {
+    from: `${monthKey}-01`,
+    to: `${monthKey}-${String(last).padStart(2, "0")}`,
+  };
+}
+
+function prevMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number) as [number, number];
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function nextMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number) as [number, number];
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number) as [number, number];
+  const names = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+  return `${names[m - 1]} ${y}`;
 }
