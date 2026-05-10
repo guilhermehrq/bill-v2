@@ -138,6 +138,9 @@ export async function loadDashboard(
       and(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
+        // Invoice payments duplicate the underlying card purchases, which the
+        // bucket already attributes to the correct month.
+        sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
         gte(bucketExpr, sql`${sixMonthsAgo}::date`),
         lte(bucketExpr, sql`${currentMonthEnd}::date`),
       ),
@@ -175,6 +178,7 @@ export async function loadDashboard(
         eq(transactions.userId, userId),
         eq(transactions.type, "expense"),
         eq(transactions.isPaid, true),
+        sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
         gte(categoryBucket, sql`${currentMonthStart}::date`),
         lte(categoryBucket, sql`${currentMonthEnd}::date`),
       ),
@@ -252,6 +256,7 @@ async function loadMonthTotals(
       and(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
+        sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
         gte(bucket, sql`${from}::date`),
         lte(bucket, sql`${to}::date`),
       ),
