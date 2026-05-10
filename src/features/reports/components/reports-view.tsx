@@ -3,8 +3,7 @@ import { CreditCardModeSelector } from "@/features/settings/credit-card-mode-sel
 import type { CreditCardReportMode } from "@/features/settings/queries";
 import { format as formatMoney } from "@/lib/money";
 import type { ComparisonData, ReportData } from "../queries";
-import { CategoryList } from "./category-list";
-import { CategoryTreemap } from "./category-treemap";
+import { CategoryReportSection } from "./category-report-section";
 import { ComparisonView } from "./comparison-view";
 import { EvolutionChart } from "./evolution-chart";
 import { ExportCsvButton } from "./export-csv-button";
@@ -72,27 +71,27 @@ export function ReportsView({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Despesas por categoria</CardTitle>
-              <CardDescription>
-                Tamanho proporcional ao gasto · {data.byParentCategory.length} categorias
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <CategoryTreemap data={data.byParentCategory} />
-            </CardContent>
-          </Card>
+          <CategoryReportSection
+            title="Despesas"
+            groups={data.expenseGroups}
+            totalCents={data.summary.expenseCents}
+            tone="expense"
+            type="expense"
+            from={data.from}
+            to={data.to}
+            emptyMessage="Sem despesas categorizadas no período."
+          />
 
-          <Card className="p-0">
-            <div className="border-border border-b px-4 py-3">
-              <p className="text-sm font-medium">Detalhamento por categoria</p>
-              <p className="text-muted-foreground text-xs">
-                Inclui subcategorias com lançamentos no período
-              </p>
-            </div>
-            <CategoryList rows={data.byCategory} totalExpenseCents={data.summary.expenseCents} />
-          </Card>
+          <CategoryReportSection
+            title="Receitas"
+            groups={data.incomeGroups}
+            totalCents={data.summary.incomeCents}
+            tone="income"
+            type="income"
+            from={data.from}
+            to={data.to}
+            emptyMessage="Sem receitas categorizadas no período."
+          />
 
           <section aria-labelledby="comparativo-heading" className="space-y-3">
             <div>
