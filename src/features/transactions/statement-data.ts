@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, lt, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, creditCardInvoices, creditCards, transactions } from "@/db/schema";
 import {
@@ -134,6 +134,29 @@ async function loadInvoiceVirtualItems(
   });
 }
 
+// Adds the same scoping clauses (account/card/category/type/search) that
+// `searchTransactions` applies, so the bottom-bar totals always reflect what
+// the visible list contains.
+function appendListFilters(clauses: SQL[], filters: TransactionFilters) {
+  if (filters.accountIds && filters.accountIds.length > 0)
+    clauses.push(inArray(transactions.accountId, filters.accountIds));
+  if (filters.cardIds && filters.cardIds.length > 0)
+    clauses.push(inArray(transactions.creditCardId, filters.cardIds));
+  if (filters.categoryIds && filters.categoryIds.length > 0)
+    clauses.push(inArray(transactions.categoryId, filters.categoryIds));
+  if (filters.types && filters.types.length > 0)
+    clauses.push(inArray(transactions.type, filters.types));
+  if (filters.search && filters.search.trim().length > 0) {
+    const term = filters.search.trim();
+    clauses.push(
+      or(
+        sql`${transactions.description} ILIKE ${"%" + term + "%"}`,
+        sql`similarity(${transactions.description}, ${term}) > 0.3`,
+      )!,
+    );
+  }
+}
+
 async function computeTotals(
   userId: string,
   filters: TransactionFilters,
@@ -143,21 +166,21 @@ async function computeTotals(
   const to = filters.to;
 
   if (mode === "all_entries") {
-    // Sum receitas e despesas no range, excluindo pagamentos de fatura.
+    const clauses: SQL[] = [
+      eq(transactions.userId, userId),
+      sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
+    ];
+    if (from) clauses.push(gte(transactions.date, from));
+    if (to) clauses.push(lte(transactions.date, to));
+    appendListFilters(clauses, filters);
+
     const [row] = (await db
       .select({
         income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
         expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       })
       .from(transactions)
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          from ? gte(transactions.date, from) : undefined,
-          to ? lte(transactions.date, to) : undefined,
-          sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
-        ),
-      )) as [{ income: number | string; expense: number | string }];
+      .where(and(...clauses))) as [{ income: number | string; expense: number | string }];
 
     const income = Number(row?.income ?? 0);
     const expense = Number(row?.expense ?? 0);
@@ -169,19 +192,26 @@ async function computeTotals(
     };
   }
 
-  // cashflow: account-only entries (no card purchases)
-  const baseClauses = [eq(transactions.userId, userId), sql`${transactions.creditCardId} IS NULL`];
+  // cashflow: account-only entries (no card purchases). All filters are
+  // applied so the totals match the displayed list.
+  const baseClauses: SQL[] = [
+    eq(transactions.userId, userId),
+    sql`${transactions.creditCardId} IS NULL`,
+  ];
+  appendListFilters(baseClauses, filters);
 
-  // Previous balance: sum of all account-affecting entries paid BEFORE `from`,
-  // plus account initial balances (those count for users that include them in the total).
+  // Initial balance respects the account filter: if the user is looking at a
+  // single account, only that account's seed counts.
+  const accountClauses: SQL[] = [eq(accounts.userId, userId), eq(accounts.archived, false)];
+  if (filters.accountIds && filters.accountIds.length > 0)
+    accountClauses.push(inArray(accounts.id, filters.accountIds));
+
   const [initRow] = (await db
     .select({
       total: sql<number>`COALESCE(SUM(${accounts.initialBalanceCents}), 0)::bigint`,
     })
     .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.archived, false)))) as [
-    { total: number | string },
-  ];
+    .where(and(...accountClauses))) as [{ total: number | string }];
 
   const initialBalance = Number(initRow?.total ?? 0);
 
@@ -206,13 +236,29 @@ async function computeTotals(
 
   const previousBalance = initialBalance + Number(prevRow?.delta ?? 0);
 
-  // Realized vs forecasted within the range, account-only.
+  // In-range totals. Transfers are not "income" or "expense" but their legs
+  // do affect a single account's balance, so we track them in a separate
+  // delta and fold it into the current/forecast balances.
   const [rangeRow] = (await db
     .select({
       realizedIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' AND ${transactions.isPaid} = true THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       forecastIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' AND ${transactions.isPaid} = false THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       realizedExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' AND ${transactions.isPaid} = true THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       forecastExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' AND ${transactions.isPaid} = false THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      realizedTransferDelta: sql<number>`COALESCE(SUM(
+        CASE
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = true AND ${transactions.transferDirection} = 'in'  THEN ${transactions.amountCents}
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = true AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
+          ELSE 0
+        END
+      ), 0)::bigint`,
+      forecastTransferDelta: sql<number>`COALESCE(SUM(
+        CASE
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = false AND ${transactions.transferDirection} = 'in'  THEN ${transactions.amountCents}
+          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = false AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
+          ELSE 0
+        END
+      ), 0)::bigint`,
     })
     .from(transactions)
     .where(
@@ -227,6 +273,8 @@ async function computeTotals(
       forecastIncome: number | string;
       realizedExpense: number | string;
       forecastExpense: number | string;
+      realizedTransferDelta: number | string;
+      forecastTransferDelta: number | string;
     },
   ];
 
@@ -234,9 +282,11 @@ async function computeTotals(
   const forecastIncome = Number(rangeRow?.forecastIncome ?? 0);
   const realizedExpense = Number(rangeRow?.realizedExpense ?? 0);
   const forecastExpense = Number(rangeRow?.forecastExpense ?? 0);
+  const realizedTransferDelta = Number(rangeRow?.realizedTransferDelta ?? 0);
+  const forecastTransferDelta = Number(rangeRow?.forecastTransferDelta ?? 0);
 
-  const currentBalance = previousBalance + realizedIncome - realizedExpense;
-  const forecastBalance = currentBalance + forecastIncome - forecastExpense;
+  const currentBalance = previousBalance + realizedIncome - realizedExpense + realizedTransferDelta;
+  const forecastBalance = currentBalance + forecastIncome - forecastExpense + forecastTransferDelta;
 
   return {
     mode: "cashflow",
