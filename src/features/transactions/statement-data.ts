@@ -254,12 +254,15 @@ async function computeTotals(
   // In-range totals. When filtering by an account/card, transfer legs are
   // counted as income (in) or expense (out) for that side; otherwise they
   // are neutral and excluded from these sums.
+  // "Realizada" = already paid; "Prevista" = full period expectation
+  // (paid + unpaid), so the user can read it as "this is what I expect to
+  // make/spend by month-end, partially already realized".
   const [rangeRow] = (await db
     .select({
       realizedIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = true AND (${transactions.type} = 'income' OR ${transferAsIncome}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      forecastIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = false AND (${transactions.type} = 'income' OR ${transferAsIncome}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      totalIncome: sql<number>`COALESCE(SUM(CASE WHEN (${transactions.type} = 'income' OR ${transferAsIncome}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       realizedExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = true AND (${transactions.type} = 'expense' OR ${transferAsExpense}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      forecastExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = false AND (${transactions.type} = 'expense' OR ${transferAsExpense}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      totalExpense: sql<number>`COALESCE(SUM(CASE WHEN (${transactions.type} = 'expense' OR ${transferAsExpense}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
     })
     .from(transactions)
     .where(
@@ -271,19 +274,19 @@ async function computeTotals(
     )) as [
     {
       realizedIncome: number | string;
-      forecastIncome: number | string;
+      totalIncome: number | string;
       realizedExpense: number | string;
-      forecastExpense: number | string;
+      totalExpense: number | string;
     },
   ];
 
   const realizedIncome = Number(rangeRow?.realizedIncome ?? 0);
-  const forecastIncome = Number(rangeRow?.forecastIncome ?? 0);
+  const forecastIncome = Number(rangeRow?.totalIncome ?? 0);
   const realizedExpense = Number(rangeRow?.realizedExpense ?? 0);
-  const forecastExpense = Number(rangeRow?.forecastExpense ?? 0);
+  const forecastExpense = Number(rangeRow?.totalExpense ?? 0);
 
   const currentBalance = previousBalance + realizedIncome - realizedExpense;
-  const forecastBalance = currentBalance + forecastIncome - forecastExpense;
+  const forecastBalance = previousBalance + forecastIncome - forecastExpense;
 
   return {
     mode: "cashflow",
