@@ -165,6 +165,21 @@ async function computeTotals(
   const from = filters.from;
   const to = filters.to;
 
+  // When the user is looking at a single account/card, a transfer is an
+  // expense for the source account and an income for the destination. Without
+  // such a filter, transfer legs cancel at the user level and we keep them
+  // out of income/expense totals.
+  const filteringByAccountSubset = Boolean(
+    (filters.accountIds && filters.accountIds.length > 0) ||
+    (filters.cardIds && filters.cardIds.length > 0),
+  );
+  const transferAsIncome = filteringByAccountSubset
+    ? sql`(${transactions.type} = 'transfer' AND ${transactions.transferDirection} = 'in')`
+    : sql`FALSE`;
+  const transferAsExpense = filteringByAccountSubset
+    ? sql`(${transactions.type} = 'transfer' AND ${transactions.transferDirection} = 'out')`
+    : sql`FALSE`;
+
   if (mode === "all_entries") {
     const clauses: SQL[] = [
       eq(transactions.userId, userId),
@@ -176,8 +191,8 @@ async function computeTotals(
 
     const [row] = (await db
       .select({
-        income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-        expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+        income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' OR ${transferAsIncome} THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+        expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' OR ${transferAsExpense} THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
       })
       .from(transactions)
       .where(and(...clauses))) as [{ income: number | string; expense: number | string }];
@@ -236,29 +251,15 @@ async function computeTotals(
 
   const previousBalance = initialBalance + Number(prevRow?.delta ?? 0);
 
-  // In-range totals. Transfers are not "income" or "expense" but their legs
-  // do affect a single account's balance, so we track them in a separate
-  // delta and fold it into the current/forecast balances.
+  // In-range totals. When filtering by an account/card, transfer legs are
+  // counted as income (in) or expense (out) for that side; otherwise they
+  // are neutral and excluded from these sums.
   const [rangeRow] = (await db
     .select({
-      realizedIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' AND ${transactions.isPaid} = true THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      forecastIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' AND ${transactions.isPaid} = false THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      realizedExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' AND ${transactions.isPaid} = true THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      forecastExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' AND ${transactions.isPaid} = false THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
-      realizedTransferDelta: sql<number>`COALESCE(SUM(
-        CASE
-          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = true AND ${transactions.transferDirection} = 'in'  THEN ${transactions.amountCents}
-          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = true AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
-          ELSE 0
-        END
-      ), 0)::bigint`,
-      forecastTransferDelta: sql<number>`COALESCE(SUM(
-        CASE
-          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = false AND ${transactions.transferDirection} = 'in'  THEN ${transactions.amountCents}
-          WHEN ${transactions.type} = 'transfer' AND ${transactions.isPaid} = false AND ${transactions.transferDirection} = 'out' THEN -${transactions.amountCents}
-          ELSE 0
-        END
-      ), 0)::bigint`,
+      realizedIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = true AND (${transactions.type} = 'income' OR ${transferAsIncome}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      forecastIncome: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = false AND (${transactions.type} = 'income' OR ${transferAsIncome}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      realizedExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = true AND (${transactions.type} = 'expense' OR ${transferAsExpense}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
+      forecastExpense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.isPaid} = false AND (${transactions.type} = 'expense' OR ${transferAsExpense}) THEN ${transactions.amountCents} ELSE 0 END), 0)::bigint`,
     })
     .from(transactions)
     .where(
@@ -273,8 +274,6 @@ async function computeTotals(
       forecastIncome: number | string;
       realizedExpense: number | string;
       forecastExpense: number | string;
-      realizedTransferDelta: number | string;
-      forecastTransferDelta: number | string;
     },
   ];
 
@@ -282,11 +281,9 @@ async function computeTotals(
   const forecastIncome = Number(rangeRow?.forecastIncome ?? 0);
   const realizedExpense = Number(rangeRow?.realizedExpense ?? 0);
   const forecastExpense = Number(rangeRow?.forecastExpense ?? 0);
-  const realizedTransferDelta = Number(rangeRow?.realizedTransferDelta ?? 0);
-  const forecastTransferDelta = Number(rangeRow?.forecastTransferDelta ?? 0);
 
-  const currentBalance = previousBalance + realizedIncome - realizedExpense + realizedTransferDelta;
-  const forecastBalance = currentBalance + forecastIncome - forecastExpense + forecastTransferDelta;
+  const currentBalance = previousBalance + realizedIncome - realizedExpense;
+  const forecastBalance = currentBalance + forecastIncome - forecastExpense;
 
   return {
     mode: "cashflow",
