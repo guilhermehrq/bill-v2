@@ -583,6 +583,12 @@ async function main() {
     else if (isInvoicePay) categoryId = null;
     else categoryId = pickCategoryId(catLookup, r.cat, type);
 
+    // Mark invoice-payment rows so reports/dashboard can exclude them as
+    // duplicates of the underlying card purchases.
+    if (isInvoicePay && !tagsArr.includes("pagamento-fatura")) {
+      tagsArr.push("pagamento-fatura");
+    }
+
     const inst = parseInstallment(r.desc);
     // Bank-side invoice payments do NOT set invoice_id (otherwise the recalc
     // trigger double-counts them). We track the (paymentTx -> invoice) link

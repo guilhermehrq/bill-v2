@@ -3,6 +3,10 @@ import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { creditCardInvoices, transactions } from "@/db/schema";
 import type { CreditCardReportMode } from "@/features/settings/queries";
+import {
+  NOT_INVOICE_PAYMENT_SQL,
+  notInvoicePayment,
+} from "@/features/transactions/invoice-payment";
 
 export type CategoryRow = {
   categoryId: string | null;
@@ -105,9 +109,7 @@ export async function loadReportData(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
         sql`${transactions.type} <> 'transfer'`,
-        // Invoice payments are control entries; the actual expenses are the
-        // individual card purchases, which are already counted via the bucket.
-        sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
+        notInvoicePayment(),
         gte(bucket, sql`${from}::date`),
         lte(bucket, sql`${to}::date`),
       ),
@@ -153,7 +155,7 @@ export async function loadReportData(
         eq(transactions.userId, userId),
         eq(transactions.isPaid, true),
         sql`${transactions.type} <> 'transfer'`,
-        sql`NOT (${transactions.tags} @> ARRAY['pagamento-fatura']::text[])`,
+        notInvoicePayment(),
         gte(bucket, sql`${from}::date`),
         lte(bucket, sql`${to}::date`),
       ),
@@ -232,7 +234,7 @@ async function loadCategoryRowsByType(
     WHERE transactions.user_id = ${userId}
       AND transactions.is_paid = true
       AND transactions.type = ${type}
-      AND NOT (transactions.tags @> ARRAY['pagamento-fatura']::text[])
+      AND ${NOT_INVOICE_PAYMENT_SQL}
       AND ${bucket} BETWEEN ${from}::date AND ${to}::date
     GROUP BY c.id, c.parent_id, c.name, c.color, c.icon, p.name, p.color, p.icon
     ORDER BY SUM(transactions.amount_cents) DESC
