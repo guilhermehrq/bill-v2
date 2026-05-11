@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { format as formatMoney } from "@/lib/money";
 import type { ForecastData } from "../queries";
+import { CashflowChart } from "./cashflow-chart";
 import { InstallmentsChart } from "./installments-chart";
 import { InstallmentsTable } from "./installments-table";
 import { RecurrencesTable } from "./recurrences-table";
@@ -32,8 +33,14 @@ export function ForecastView({ data }: Props) {
   const referenceIncomeCents =
     summary.typicalMonthlyIncomeCents + summary.recurringIncomeMonthlyCents;
 
-  const currentPct = pctOfIncome(summary.currentMonthCommitmentCents, referenceIncomeCents);
-  const avgPct = pctOfIncome(summary.averageNext6mCommitmentCents, referenceIncomeCents);
+  const avgCommitmentPct = pctOfIncome(summary.averageNext6mCommitmentCents, referenceIncomeCents);
+
+  const balanceTrend90 = summary.projectedBalance90dCents - summary.currentBalanceCents;
+  const balance90Tone: "income" | "expense" | undefined =
+    summary.projectedBalance90dCents < 0 ? "expense" : balanceTrend90 >= 0 ? "income" : undefined;
+
+  const worstTone: "income" | "expense" | undefined =
+    summary.worstMonth && summary.worstMonth.balanceCents < 0 ? "expense" : undefined;
 
   return (
     <div className="space-y-6 py-4">
@@ -41,43 +48,61 @@ export function ForecastView({ data }: Props) {
         <div>
           <h1 className="text-2xl font-semibold">Previsão</h1>
           <p className="text-muted-foreground text-sm">
-            Compromisso total (parcelas + recorrentes) e renda esperada por mês.
+            Fluxo de caixa, compromissos e renda esperada nos próximos meses.
           </p>
         </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryCard
-          label="Este mês"
-          value={formatMoney(summary.currentMonthCommitmentCents)}
-          hint={currentPct !== null ? `${currentPct.toFixed(0)}% da renda` : undefined}
-          tone={toneFor(currentPct)}
+          label="Saldo hoje"
+          value={formatMoney(summary.currentBalanceCents)}
+          hint="contas inclusas no total"
         />
         <SummaryCard
-          label="Média 6m"
+          label="Em 90 dias"
+          value={formatMoney(summary.projectedBalance90dCents)}
+          hint={
+            balanceTrend90 !== 0
+              ? `${balanceTrend90 > 0 ? "+" : "−"}${formatMoney(Math.abs(balanceTrend90))} vs hoje`
+              : "sem variação projetada"
+          }
+          tone={balance90Tone}
+        />
+        <SummaryCard
+          label="Mês mais apertado"
+          value={summary.worstMonth ? formatMonthYear(summary.worstMonth.month) : "—"}
+          hint={
+            summary.worstMonth
+              ? formatMoney(summary.worstMonth.balanceCents)
+              : "sem dados projetados"
+          }
+          tone={worstTone}
+        />
+        <SummaryCard
+          label="Compromisso médio"
           value={formatMoney(summary.averageNext6mCommitmentCents)}
-          hint={avgPct !== null ? `${avgPct.toFixed(0)}% da renda` : undefined}
-          tone={toneFor(avgPct)}
-        />
-        <SummaryCard
-          label="Recorrentes/mês"
-          value={formatMoney(summary.recurringExpenseMonthlyCents)}
           hint={
-            summary.activeRecurrenceCount > 0
-              ? `${summary.activeRecurrenceCount} ativas`
-              : "nenhuma cadastrada"
+            avgCommitmentPct !== null
+              ? `${avgCommitmentPct.toFixed(0)}% da renda · 6m`
+              : "parcelas + recorrentes"
           }
-        />
-        <SummaryCard
-          label="Livre em"
-          value={summary.lastInstallmentMonth ? formatMonthYear(summary.lastInstallmentMonth) : "—"}
-          hint={
-            summary.lastInstallmentMonth
-              ? `${summary.activePurchaseCount} compras parceladas`
-              : "nada parcelado agora"
-          }
+          tone={toneForCommitment(avgCommitmentPct)}
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Fluxo de caixa projetado</CardTitle>
+          <CardDescription>
+            Barras = saldo do mês (entradas − saídas). Linha = saldo acumulado partindo de{" "}
+            {formatMoney(summary.currentBalanceCents)}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CashflowChart data={monthly} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -103,7 +128,16 @@ export function ForecastView({ data }: Props) {
           <h2 id="compras-heading" className="text-base font-medium">
             Compras parceladas ativas
           </h2>
-          <p className="text-muted-foreground text-sm">Ordenadas pelo mês em que terminam.</p>
+          <p className="text-muted-foreground text-sm">
+            {summary.lastInstallmentMonth ? (
+              <>
+                {summary.activePurchaseCount} ativas · livre em{" "}
+                {formatMonthYear(summary.lastInstallmentMonth)}.
+              </>
+            ) : (
+              <>Sem compras parceladas no momento.</>
+            )}
+          </p>
         </div>
         <InstallmentsTable purchases={purchases} averageIncomeCents={referenceIncomeCents} />
       </section>
@@ -114,7 +148,14 @@ export function ForecastView({ data }: Props) {
             Recorrências ativas
           </h2>
           <p className="text-muted-foreground text-sm">
-            Ordenadas pelo equivalente mensal projetado para os próximos meses.
+            {summary.activeRecurrenceCount > 0 ? (
+              <>
+                {summary.activeRecurrenceCount} ativas · despesa fixa{" "}
+                {formatMoney(summary.recurringExpenseMonthlyCents)}/mês.
+              </>
+            ) : (
+              <>Sem recorrências cadastradas.</>
+            )}
           </p>
         </div>
         <RecurrencesTable recurrences={recurrences} averageIncomeCents={referenceIncomeCents} />
@@ -129,7 +170,7 @@ function pctOfIncome(commitmentCents: number, incomeCents: number): number | nul
 }
 
 // 0-30% verde, 30-50% neutro, >50% vermelho.
-function toneFor(pct: number | null): "income" | "expense" | undefined {
+function toneForCommitment(pct: number | null): "income" | "expense" | undefined {
   if (pct === null) return undefined;
   if (pct >= 50) return "expense";
   if (pct <= 30) return "income";

@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { listAccountsWithBalances } from "@/features/accounts/queries";
 import { listRecurrences } from "@/features/recurrences/queries";
 import { NOT_INVOICE_PAYMENT_SQL } from "@/features/transactions/invoice-payment";
 import { projectRecurrenceMonthly } from "./projection";
@@ -22,12 +23,20 @@ export type InstallmentPurchase = {
 
 export type MonthlyProjection = {
   month: string; // YYYY-MM-01
+  // Comprometimento (mês cheio) — base do gráfico de compromisso.
   installmentCents: number;
   recurringExpenseCents: number;
   recurringIncomeCents: number;
   // Renda esperada = recorrências de receita + mediana de receitas NÃO-recorrentes.
-  // Evita duplicar quando o salário recorrente já gerou transações no histórico.
   expectedIncomeCents: number;
+  // Fluxo de caixa real (do dia presente em diante no mês corrente; mês cheio
+  // daqui pra frente). Diferente do comprometimento porque desconta o que já
+  // foi pago (já refletido no balance atual) e inclui lançamentos manuais
+  // futuros não-recorrentes/não-parcelados.
+  cashInCents: number;
+  cashOutCents: number;
+  netCashCents: number;
+  cumulativeBalanceCents: number;
 };
 
 export type ActiveRecurrence = {
@@ -60,6 +69,11 @@ export type ForecastSummary = {
   activePurchaseCount: number;
   activeRecurrenceCount: number;
   lastInstallmentMonth: string | null;
+  // Fluxo de caixa.
+  currentBalanceCents: number;
+  projectedBalance30dCents: number;
+  projectedBalance90dCents: number;
+  worstMonth: { month: string; balanceCents: number } | null;
 };
 
 export type ForecastData = {
@@ -79,12 +93,22 @@ export async function loadForecastData(
   today: Date = new Date(),
 ): Promise<ForecastData> {
   const fromMonth = firstOfMonth(today);
+  const todayStr = toDateString(today);
+  const fromMonthStr = toDateString(fromMonth);
   const incomeWindow = {
     from: addMonths(fromMonth, -INCOME_LOOKBACK_MONTHS),
     to: fromMonth, // exclusive — covers the N closed prior months
   };
 
-  const [purchaseRows, installmentMonthlyRows, incomeRows, recurrenceList] = await Promise.all([
+  const [
+    purchaseRows,
+    installmentMonthlyRows,
+    installmentRemainingRows,
+    manualCashRows,
+    incomeRows,
+    recurrenceList,
+    accountList,
+  ] = await Promise.all([
     db.execute(sql`
       SELECT
         COALESCE(t.installment_of_id, t.id)::text AS purchase_id,
@@ -105,7 +129,7 @@ export async function loadForecastData(
         AND t.credit_card_id IS NOT NULL
         AND t.installment_total IS NOT NULL
         AND t.installment_total > 1
-        AND t.date >= ${toDateString(fromMonth)}::date
+        AND t.date >= ${fromMonthStr}::date
       GROUP BY 1, 2, 3, 4
       ORDER BY MAX(t.date) ASC, description ASC
     `),
@@ -118,8 +142,43 @@ export async function loadForecastData(
         AND t.credit_card_id IS NOT NULL
         AND t.installment_total IS NOT NULL
         AND t.installment_total > 1
-        AND t.date >= ${toDateString(fromMonth)}::date
+        AND t.date >= ${fromMonthStr}::date
       GROUP BY 1
+      ORDER BY 1 ASC
+    `),
+    // Parcelas remaining: a partir de hoje (não do início do mês). Usado no
+    // fluxo de caixa pra não double-contar o que já foi pago no mês corrente.
+    db.execute(sql`
+      SELECT
+        to_char(date_trunc('month', t.date), 'YYYY-MM-DD') AS month,
+        SUM(t.amount_cents)::bigint AS total
+      FROM transactions t
+      WHERE t.user_id = ${userId}
+        AND t.credit_card_id IS NOT NULL
+        AND t.installment_total IS NOT NULL
+        AND t.installment_total > 1
+        AND t.date >= ${todayStr}::date
+        AND t.is_paid = false
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `),
+    // Lançamentos manuais futuros (não-recorrência, não-parcela), excluindo
+    // pagamento de fatura (já é coberto pela soma de parcelas/recorrências
+    // de cartão no comprometimento — não queremos contar 2x).
+    db.execute(sql`
+      SELECT
+        to_char(date_trunc('month', date), 'YYYY-MM-DD') AS month,
+        type,
+        SUM(amount_cents)::bigint AS total
+      FROM transactions
+      WHERE user_id = ${userId}
+        AND is_paid = false
+        AND type <> 'transfer'
+        AND recurrence_id IS NULL
+        AND (installment_total IS NULL OR installment_total = 1)
+        AND date >= ${todayStr}::date
+        AND ${NOT_INVOICE_PAYMENT_SQL}
+      GROUP BY 1, 2
       ORDER BY 1 ASC
     `),
     // Renda NÃO-recorrente, somada por mês, nos N meses fechados anteriores.
@@ -141,6 +200,7 @@ export async function loadForecastData(
       ORDER BY 1 ASC
     `),
     listRecurrences(userId),
+    listAccountsWithBalances(userId),
   ]);
 
   const purchases: InstallmentPurchase[] = purchaseRows.map((r) => ({
@@ -161,6 +221,21 @@ export async function loadForecastData(
   const installmentMonthlyMap = new Map<string, number>(
     installmentMonthlyRows.map((r) => [String(r.month), Number(r.total)]),
   );
+  const installmentRemainingMap = new Map<string, number>(
+    installmentRemainingRows.map((r) => [String(r.month), Number(r.total)]),
+  );
+
+  const manualCashIncomeMap = new Map<string, number>();
+  const manualCashExpenseMap = new Map<string, number>();
+  for (const r of manualCashRows) {
+    const month = String(r.month);
+    const value = Number(r.total);
+    if (r.type === "income") {
+      manualCashIncomeMap.set(month, (manualCashIncomeMap.get(month) ?? 0) + value);
+    } else if (r.type === "expense") {
+      manualCashExpenseMap.set(month, (manualCashExpenseMap.get(month) ?? 0) + value);
+    }
+  }
 
   const lastInstallmentDate = purchases.reduce<string | null>(
     (acc, p) => (acc === null || p.lastDate > acc ? p.lastDate : acc),
@@ -177,53 +252,85 @@ export async function loadForecastData(
   const toMonth = installmentEnd.getTime() > defaultEnd.getTime() ? installmentEnd : defaultEnd;
 
   const monthRange = enumerateMonths(fromMonth, toMonth);
+  const toMonthStr = toDateString(toMonth);
 
-  // Projeta cada recorrência ativa mês a mês no horizonte.
+  // Duas projeções por recorrência:
+  //  - "compromisso": mês cheio (fromMonth) — usada no gráfico de compromisso.
+  //  - "cashflow": só ocorrências a partir de hoje — usada no fluxo de caixa.
   const activeForProjection = recurrenceList.filter((r) => r.active);
 
   const projectedExpense = new Map<string, number>();
   const projectedIncome = new Map<string, number>();
+  const cashProjectedExpense = new Map<string, number>();
+  const cashProjectedIncome = new Map<string, number>();
   const recurrenceMonthly: Array<{ id: string; series: Map<string, number> }> = [];
 
   for (const r of activeForProjection) {
-    const series = projectRecurrenceMonthly(
-      {
-        id: r.id,
-        amountCents: r.amountCents,
-        frequency: r.frequency,
-        interval: r.interval,
-        dayOfMonth: r.dayOfMonth,
-        dayOfWeek: r.dayOfWeek,
-        startDate: r.startDate,
-        endDate: r.endDate,
-        maxOccurrences: r.maxOccurrences,
-        lastGeneratedDate: r.lastGeneratedDate,
-      },
-      toDateString(fromMonth),
-      toDateString(toMonth),
-    );
+    const projectionInput = {
+      id: r.id,
+      amountCents: r.amountCents,
+      frequency: r.frequency,
+      interval: r.interval,
+      dayOfMonth: r.dayOfMonth,
+      dayOfWeek: r.dayOfWeek,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      maxOccurrences: r.maxOccurrences,
+      lastGeneratedDate: r.lastGeneratedDate,
+    };
+    const fullSeries = projectRecurrenceMonthly(projectionInput, fromMonthStr, toMonthStr);
+    const cashSeries = projectRecurrenceMonthly(projectionInput, todayStr, toMonthStr);
 
-    const target = r.type === "income" ? projectedIncome : projectedExpense;
-    for (const [month, cents] of series) {
-      target.set(month, (target.get(month) ?? 0) + cents);
+    const fullTarget = r.type === "income" ? projectedIncome : projectedExpense;
+    for (const [month, cents] of fullSeries) {
+      fullTarget.set(month, (fullTarget.get(month) ?? 0) + cents);
     }
-    recurrenceMonthly.push({ id: r.id, series });
+
+    const cashTarget = r.type === "income" ? cashProjectedIncome : cashProjectedExpense;
+    for (const [month, cents] of cashSeries) {
+      cashTarget.set(month, (cashTarget.get(month) ?? 0) + cents);
+    }
+
+    recurrenceMonthly.push({ id: r.id, series: fullSeries });
   }
 
   const incomeMonthlyValues = incomeRows.map((r) => Number(r.total));
   const typicalMonthlyIncomeCents = median(incomeMonthlyValues);
   const incomeMonthsSampled = incomeMonthlyValues.length;
 
+  // Saldo atual: soma das contas marcadas pra entrar no total e não-arquivadas.
+  // Esse é o ponto de partida da linha de saldo acumulado projetado.
+  const currentBalanceCents = accountList
+    .filter((a) => !a.archived && a.includeInTotalBalance)
+    .reduce((acc, a) => acc + a.balanceCents, 0);
+
+  let runningBalance = currentBalanceCents;
   const monthly: MonthlyProjection[] = monthRange.map((monthKey) => {
     const installmentCents = installmentMonthlyMap.get(monthKey) ?? 0;
     const recurringExpenseCents = projectedExpense.get(monthKey) ?? 0;
     const recurringIncomeCents = projectedIncome.get(monthKey) ?? 0;
+
+    const cashInstallment = installmentRemainingMap.get(monthKey) ?? 0;
+    const cashRecurringExpense = cashProjectedExpense.get(monthKey) ?? 0;
+    const cashRecurringIncome = cashProjectedIncome.get(monthKey) ?? 0;
+    const manualIn = manualCashIncomeMap.get(monthKey) ?? 0;
+    const manualOut = manualCashExpenseMap.get(monthKey) ?? 0;
+
+    const cashInCents = cashRecurringIncome + manualIn;
+    const cashOutCents = cashInstallment + cashRecurringExpense + manualOut;
+    const netCashCents = cashInCents - cashOutCents;
+    runningBalance += netCashCents;
+
     return {
       month: monthKey,
       installmentCents,
       recurringExpenseCents,
       recurringIncomeCents,
       expectedIncomeCents: recurringIncomeCents + typicalMonthlyIncomeCents,
+      cashInCents,
+      cashOutCents,
+      netCashCents,
+      cumulativeBalanceCents: runningBalance,
     };
   });
 
@@ -274,9 +381,22 @@ export async function loadForecastData(
     .filter((r) => r.type === "expense")
     .reduce((acc, r) => acc + r.monthlyEquivalentCents, 0);
 
+  // Saldo projetado em 30/90 dias: índice 0 = fim do mês corrente, índice 2 =
+  // fim do 3º mês (≈90 dias). Usa cumulative já calculado.
+  const projectedBalance30dCents = monthly[0]?.cumulativeBalanceCents ?? currentBalanceCents;
+  const projectedBalance90dCents = monthly[2]?.cumulativeBalanceCents ?? projectedBalance30dCents;
+
+  // Mês mais apertado: menor saldo acumulado nos próximos 12m (ignora cauda
+  // longa de parcelas; o usuário liga mais pro horizonte gerenciável).
+  const worstMonth = monthly
+    .slice(0, 12)
+    .reduce<
+      ForecastSummary["worstMonth"]
+    >((acc, m) => (acc === null || m.cumulativeBalanceCents < acc.balanceCents ? { month: m.month, balanceCents: m.cumulativeBalanceCents } : acc), null);
+
   return {
-    fromMonth: toDateString(fromMonth),
-    toMonth: toDateString(toMonth),
+    fromMonth: fromMonthStr,
+    toMonth: toMonthStr,
     summary: {
       typicalMonthlyIncomeCents,
       incomeMonthsSampled,
@@ -290,6 +410,10 @@ export async function loadForecastData(
       lastInstallmentMonth: lastInstallmentDate
         ? toDateString(firstOfMonth(parseDateString(lastInstallmentDate)))
         : null,
+      currentBalanceCents,
+      projectedBalance30dCents,
+      projectedBalance90dCents,
+      worstMonth,
     },
     monthly,
     purchases,
@@ -297,24 +421,28 @@ export async function loadForecastData(
   };
 }
 
+// Date helpers use local time (not UTC) to stay consistent with the rest of
+// the app — `transactions.date` is stored as a calendar date and the account
+// balance helper also computes "today" in local time. Mixing UTC would shift
+// the boundary at midnight in non-UTC timezones (Brazil = UTC-3).
 function firstOfMonth(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function addMonths(date: Date, months: number): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
 }
 
 function toDateString(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
 function parseDateString(s: string): Date {
   const [y, m, d] = s.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d));
+  return new Date(y, m - 1, d);
 }
 
 function enumerateMonths(from: Date, to: Date): string[] {
