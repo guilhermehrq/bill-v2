@@ -1,6 +1,7 @@
 import {
   ArrowRightLeft,
   BarChart3,
+  CalendarClock,
   CreditCard,
   Download,
   LayoutDashboard,
@@ -53,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Insights",
     items: [
       { title: "Relatórios", href: "/relatorios", icon: BarChart3 },
+      { title: "Previsão", href: "/previsao", icon: CalendarClock },
       { title: "Importar", href: "/importar", icon: Download, phase: 2.5 },
     ],
   },
