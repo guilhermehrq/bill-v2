@@ -84,7 +84,7 @@ export async function loadForecastData(
     to: fromMonth, // exclusive — covers the N closed prior months
   };
 
-  const [purchaseRows, installmentMonthlyRows, incomeRow, recurrenceList] = await Promise.all([
+  const [purchaseRows, installmentMonthlyRows, incomeRows, recurrenceList] = await Promise.all([
     db.execute(sql`
       SELECT
         COALESCE(t.installment_of_id, t.id)::text AS purchase_id,
@@ -210,8 +210,9 @@ export async function loadForecastData(
     recurrenceMonthly.push({ id: r.id, series });
   }
 
-  const incomeTotalCents = Number(incomeRow[0]?.total ?? 0);
-  const averageMonthlyIncomeCents = Math.round(incomeTotalCents / 3);
+  const incomeMonthlyValues = incomeRows.map((r) => Number(r.total));
+  const typicalMonthlyIncomeCents = median(incomeMonthlyValues);
+  const incomeMonthsSampled = incomeMonthlyValues.length;
 
   const monthly: MonthlyProjection[] = monthRange.map((monthKey) => {
     const installmentCents = installmentMonthlyMap.get(monthKey) ?? 0;
@@ -222,7 +223,7 @@ export async function loadForecastData(
       installmentCents,
       recurringExpenseCents,
       recurringIncomeCents,
-      expectedIncomeCents: recurringIncomeCents + averageMonthlyIncomeCents,
+      expectedIncomeCents: recurringIncomeCents + typicalMonthlyIncomeCents,
     };
   });
 
@@ -277,7 +278,8 @@ export async function loadForecastData(
     fromMonth: toDateString(fromMonth),
     toMonth: toDateString(toMonth),
     summary: {
-      averageMonthlyIncomeCents,
+      typicalMonthlyIncomeCents,
+      incomeMonthsSampled,
       recurringIncomeMonthlyCents,
       recurringExpenseMonthlyCents,
       currentMonthInstallmentCents,
@@ -326,4 +328,12 @@ function enumerateMonths(from: Date, to: Date): string[] {
     i += 1;
   }
   return out;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid]!;
+  return Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
 }

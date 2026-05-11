@@ -27,10 +27,10 @@ const MONTH_LABELS = [
 export function ForecastView({ data }: Props) {
   const { summary, monthly, purchases, recurrences } = data;
 
-  // Renda total esperada por mês = recorrente + média 3m não-recorrente.
-  // Usar isso como base do % pra alinhar com o que o gráfico mostra.
+  // Renda total esperada por mês = recorrente + mediana não-recorrente.
+  // Mediana é robusta a outliers (13º, bônus) que distorceriam a média.
   const referenceIncomeCents =
-    summary.averageMonthlyIncomeCents + summary.recurringIncomeMonthlyCents;
+    summary.typicalMonthlyIncomeCents + summary.recurringIncomeMonthlyCents;
 
   const currentPct = pctOfIncome(summary.currentMonthCommitmentCents, referenceIncomeCents);
   const avgPct = pctOfIncome(summary.averageNext6mCommitmentCents, referenceIncomeCents);
@@ -85,8 +85,8 @@ export function ForecastView({ data }: Props) {
           <CardDescription>
             {referenceIncomeCents > 0 ? (
               <>
-                Linha verde = renda esperada ({formatMoney(referenceIncomeCents)} médios —
-                recorrente + média 3m).
+                Linha verde = renda esperada ({formatMoney(referenceIncomeCents)} — recorrente +
+                mediana de {summary.incomeMonthsSampled}m).
               </>
             ) : (
               <>Cadastre receitas pra ver o comparativo com a renda esperada.</>
