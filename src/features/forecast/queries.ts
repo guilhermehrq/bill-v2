@@ -1,7 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { listRecurrences } from "@/features/recurrences/queries";
 import { NOT_INVOICE_PAYMENT_SQL } from "@/features/transactions/invoice-payment";
+import { projectRecurrenceMonthly } from "./projection";
 
 export type InstallmentPurchase = {
   purchaseId: string;
@@ -18,26 +20,59 @@ export type InstallmentPurchase = {
   lastDate: string; // YYYY-MM-DD
 };
 
-export type MonthlyInstallment = {
+export type MonthlyProjection = {
   month: string; // YYYY-MM-01
-  totalCents: number;
+  installmentCents: number;
+  recurringExpenseCents: number;
+  recurringIncomeCents: number;
+  // Renda esperada = recorrências de receita + mediana de receitas NÃO-recorrentes.
+  // Evita duplicar quando o salário recorrente já gerou transações no histórico.
+  expectedIncomeCents: number;
+};
+
+export type ActiveRecurrence = {
+  id: string;
+  description: string;
+  type: "income" | "expense";
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: number;
+  amountCents: number;
+  monthlyEquivalentCents: number;
+  endDate: string | null;
+  categoryName: string | null;
+  parentCategoryName: string | null;
+  accountName: string | null;
+  cardName: string | null;
+  nextDate: string | null;
 };
 
 export type ForecastSummary = {
-  averageMonthlyIncomeCents: number;
-  currentMonthCommitmentCents: number;
+  // Mediana mensal de receitas não-recorrentes nos N meses fechados anteriores.
+  // Mediana > média porque renda variável (13º, bônus, restituição) inflaciona
+  // a média; mediana descarta outliers naturalmente.
+  typicalMonthlyIncomeCents: number;
+  incomeMonthsSampled: number;
+  recurringIncomeMonthlyCents: number;
+  recurringExpenseMonthlyCents: number;
+  currentMonthInstallmentCents: number;
+  currentMonthCommitmentCents: number; // parcelas + despesa recorrente
   averageNext6mCommitmentCents: number;
   activePurchaseCount: number;
+  activeRecurrenceCount: number;
   lastInstallmentMonth: string | null;
 };
 
 export type ForecastData = {
   fromMonth: string; // YYYY-MM-01
-  toMonth: string; // YYYY-MM-01 (last month with an installment, or fromMonth)
+  toMonth: string; // YYYY-MM-01 (inclusive)
   summary: ForecastSummary;
-  monthly: MonthlyInstallment[];
+  monthly: MonthlyProjection[];
   purchases: InstallmentPurchase[];
+  recurrences: ActiveRecurrence[];
 };
+
+const DEFAULT_HORIZON_MONTHS = 12;
+const INCOME_LOOKBACK_MONTHS = 6;
 
 export async function loadForecastData(
   userId: string,
@@ -45,11 +80,11 @@ export async function loadForecastData(
 ): Promise<ForecastData> {
   const fromMonth = firstOfMonth(today);
   const incomeWindow = {
-    from: addMonths(fromMonth, -3),
-    to: fromMonth, // exclusive — covers the 3 closed prior months
+    from: addMonths(fromMonth, -INCOME_LOOKBACK_MONTHS),
+    to: fromMonth, // exclusive — covers the N closed prior months
   };
 
-  const [purchaseRows, monthlyRows, incomeRow] = await Promise.all([
+  const [purchaseRows, installmentMonthlyRows, incomeRow, recurrenceList] = await Promise.all([
     db.execute(sql`
       SELECT
         COALESCE(t.installment_of_id, t.id)::text AS purchase_id,
@@ -87,16 +122,25 @@ export async function loadForecastData(
       GROUP BY 1
       ORDER BY 1 ASC
     `),
+    // Renda NÃO-recorrente, somada por mês, nos N meses fechados anteriores.
+    // Mediana é calculada em JS — robusta a outliers (13º, bônus). Exclui
+    // recurrence_id pra não duplicar quando o salário é uma recorrência.
     db.execute(sql`
-      SELECT COALESCE(SUM(amount_cents), 0)::bigint AS total
+      SELECT
+        to_char(date_trunc('month', date), 'YYYY-MM-DD') AS month,
+        COALESCE(SUM(amount_cents), 0)::bigint AS total
       FROM transactions
       WHERE user_id = ${userId}
         AND is_paid = true
         AND type = 'income'
+        AND recurrence_id IS NULL
         AND ${NOT_INVOICE_PAYMENT_SQL}
         AND date >= ${toDateString(incomeWindow.from)}::date
         AND date < ${toDateString(incomeWindow.to)}::date
+      GROUP BY 1
+      ORDER BY 1 ASC
     `),
+    listRecurrences(userId),
   ]);
 
   const purchases: InstallmentPurchase[] = purchaseRows.map((r) => ({
@@ -114,45 +158,140 @@ export async function loadForecastData(
     lastDate: String(r.last_date),
   }));
 
-  const monthlyMap = new Map<string, number>(
-    monthlyRows.map((r) => [String(r.month), Number(r.total)]),
+  const installmentMonthlyMap = new Map<string, number>(
+    installmentMonthlyRows.map((r) => [String(r.month), Number(r.total)]),
   );
 
-  const lastDate = purchases.reduce<string | null>(
+  const lastInstallmentDate = purchases.reduce<string | null>(
     (acc, p) => (acc === null || p.lastDate > acc ? p.lastDate : acc),
     null,
   );
 
-  const toMonth = lastDate ? firstOfMonth(parseDateString(lastDate)) : fromMonth;
-  const monthly = fillMonthlyRange(fromMonth, toMonth, monthlyMap);
+  // Horizonte: vai até a última parcela ou DEFAULT_HORIZON_MONTHS à frente,
+  // o que for maior. Garante que recorrências sempre apareçam mesmo sem
+  // parcelas ativas.
+  const defaultEnd = addMonths(fromMonth, DEFAULT_HORIZON_MONTHS - 1);
+  const installmentEnd = lastInstallmentDate
+    ? firstOfMonth(parseDateString(lastInstallmentDate))
+    : fromMonth;
+  const toMonth = installmentEnd.getTime() > defaultEnd.getTime() ? installmentEnd : defaultEnd;
 
-  const currentMonthCommitmentCents = monthlyMap.get(toDateString(fromMonth)) ?? 0;
+  const monthRange = enumerateMonths(fromMonth, toMonth);
 
-  // Mean over the next 6 months of commitments (only months that have data —
-  // empty months don't dilute the average; if you have no parcela in 4 of the
-  // next 6 months, that's already useful information via the chart).
-  const next6 = monthly.slice(0, 6);
-  const next6Filled = next6.filter((m) => m.totalCents > 0);
-  const averageNext6mCommitmentCents =
-    next6Filled.length > 0
-      ? Math.round(next6Filled.reduce((acc, m) => acc + m.totalCents, 0) / next6Filled.length)
-      : 0;
+  // Projeta cada recorrência ativa mês a mês no horizonte.
+  const activeForProjection = recurrenceList.filter((r) => r.active);
+
+  const projectedExpense = new Map<string, number>();
+  const projectedIncome = new Map<string, number>();
+  const recurrenceMonthly: Array<{ id: string; series: Map<string, number> }> = [];
+
+  for (const r of activeForProjection) {
+    const series = projectRecurrenceMonthly(
+      {
+        id: r.id,
+        amountCents: r.amountCents,
+        frequency: r.frequency,
+        interval: r.interval,
+        dayOfMonth: r.dayOfMonth,
+        dayOfWeek: r.dayOfWeek,
+        startDate: r.startDate,
+        endDate: r.endDate,
+        maxOccurrences: r.maxOccurrences,
+        lastGeneratedDate: r.lastGeneratedDate,
+      },
+      toDateString(fromMonth),
+      toDateString(toMonth),
+    );
+
+    const target = r.type === "income" ? projectedIncome : projectedExpense;
+    for (const [month, cents] of series) {
+      target.set(month, (target.get(month) ?? 0) + cents);
+    }
+    recurrenceMonthly.push({ id: r.id, series });
+  }
 
   const incomeTotalCents = Number(incomeRow[0]?.total ?? 0);
   const averageMonthlyIncomeCents = Math.round(incomeTotalCents / 3);
+
+  const monthly: MonthlyProjection[] = monthRange.map((monthKey) => {
+    const installmentCents = installmentMonthlyMap.get(monthKey) ?? 0;
+    const recurringExpenseCents = projectedExpense.get(monthKey) ?? 0;
+    const recurringIncomeCents = projectedIncome.get(monthKey) ?? 0;
+    return {
+      month: monthKey,
+      installmentCents,
+      recurringExpenseCents,
+      recurringIncomeCents,
+      expectedIncomeCents: recurringIncomeCents + averageMonthlyIncomeCents,
+    };
+  });
+
+  // Equivalente mensal: média de N primeiros meses do horizonte (mínimo 1 mês).
+  // Usa o range já calculado pra evitar problemas com endDate/maxOccurrences.
+  const RANK_WINDOW = 6;
+  const rankWindow = monthly.slice(0, RANK_WINDOW).map((m) => m.month);
+  const recurrences: ActiveRecurrence[] = activeForProjection.map((r) => {
+    const series = recurrenceMonthly.find((e) => e.id === r.id)?.series ?? new Map();
+    const totalInWindow = rankWindow.reduce((acc, m) => acc + (series.get(m) ?? 0), 0);
+    const monthlyEquivalentCents = Math.round(totalInWindow / Math.max(rankWindow.length, 1));
+    return {
+      id: r.id,
+      description: r.description,
+      type: r.type,
+      frequency: r.frequency,
+      interval: r.interval,
+      amountCents: r.amountCents,
+      monthlyEquivalentCents,
+      endDate: r.endDate,
+      categoryName: r.categoryName,
+      parentCategoryName: r.parentCategoryName,
+      accountName: r.accountName,
+      cardName: r.creditCardName,
+      nextDate: r.nextDate,
+    };
+  });
+  recurrences.sort((a, b) => b.monthlyEquivalentCents - a.monthlyEquivalentCents);
+
+  const currentMonthKey = toDateString(fromMonth);
+  const currentMonthInstallmentCents = installmentMonthlyMap.get(currentMonthKey) ?? 0;
+  const currentMonthRecurringExpenseCents = projectedExpense.get(currentMonthKey) ?? 0;
+  const currentMonthCommitmentCents =
+    currentMonthInstallmentCents + currentMonthRecurringExpenseCents;
+
+  const next6 = monthly.slice(0, 6);
+  const next6Commitments = next6.map((m) => m.installmentCents + m.recurringExpenseCents);
+  const next6Filled = next6Commitments.filter((c) => c > 0);
+  const averageNext6mCommitmentCents =
+    next6Filled.length > 0
+      ? Math.round(next6Filled.reduce((acc, c) => acc + c, 0) / next6Filled.length)
+      : 0;
+
+  const recurringIncomeMonthlyCents = recurrences
+    .filter((r) => r.type === "income")
+    .reduce((acc, r) => acc + r.monthlyEquivalentCents, 0);
+  const recurringExpenseMonthlyCents = recurrences
+    .filter((r) => r.type === "expense")
+    .reduce((acc, r) => acc + r.monthlyEquivalentCents, 0);
 
   return {
     fromMonth: toDateString(fromMonth),
     toMonth: toDateString(toMonth),
     summary: {
       averageMonthlyIncomeCents,
+      recurringIncomeMonthlyCents,
+      recurringExpenseMonthlyCents,
+      currentMonthInstallmentCents,
       currentMonthCommitmentCents,
       averageNext6mCommitmentCents,
       activePurchaseCount: purchases.length,
-      lastInstallmentMonth: lastDate ? toDateString(firstOfMonth(parseDateString(lastDate))) : null,
+      activeRecurrenceCount: recurrences.length,
+      lastInstallmentMonth: lastInstallmentDate
+        ? toDateString(firstOfMonth(parseDateString(lastInstallmentDate)))
+        : null,
     },
     monthly,
     purchases,
+    recurrences,
   };
 }
 
@@ -176,15 +315,13 @@ function parseDateString(s: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
-function fillMonthlyRange(from: Date, to: Date, map: Map<string, number>): MonthlyInstallment[] {
-  const out: MonthlyInstallment[] = [];
-  // Hard cap to keep the chart sane if someone has a 60x installment.
+function enumerateMonths(from: Date, to: Date): string[] {
+  const out: string[] = [];
   const MAX_MONTHS = 36;
   let cursor = from;
   let i = 0;
   while (cursor.getTime() <= to.getTime() && i < MAX_MONTHS) {
-    const key = toDateString(cursor);
-    out.push({ month: key, totalCents: map.get(key) ?? 0 });
+    out.push(toDateString(cursor));
     cursor = addMonths(cursor, 1);
     i += 1;
   }

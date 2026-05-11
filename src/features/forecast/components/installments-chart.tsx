@@ -12,11 +12,10 @@ import {
   YAxis,
 } from "recharts";
 import { format as formatMoney, toReais } from "@/lib/money";
-import type { MonthlyInstallment } from "../queries";
+import type { MonthlyProjection } from "../queries";
 
 type Props = {
-  data: MonthlyInstallment[];
-  averageIncomeCents: number;
+  data: MonthlyProjection[];
 };
 
 const MONTH_LABELS = [
@@ -34,28 +33,31 @@ const MONTH_LABELS = [
   "dez",
 ];
 
-export function InstallmentsChart({ data, averageIncomeCents }: Props) {
+export function InstallmentsChart({ data }: Props) {
   if (data.length === 0) {
     return (
       <div className="text-muted-foreground flex h-[280px] items-center justify-center text-sm">
-        Sem parcelas futuras.
+        Sem compromissos futuros.
       </div>
     );
   }
 
-  const incomeReais = toReais(averageIncomeCents);
-
   const chartData = data.map((d) => {
     const [y, m] = d.month.split("-").map(Number);
+    const commitmentCents = d.installmentCents + d.recurringExpenseCents;
     return {
       label: `${MONTH_LABELS[(m ?? 1) - 1]?.toUpperCase() ?? ""}/${String(y ?? 0).slice(2)}`,
-      parcelas: toReais(d.totalCents),
-      parcelasCents: d.totalCents,
-      renda: incomeReais,
+      parcelas: toReais(d.installmentCents),
+      recorrentes: toReais(d.recurringExpenseCents),
+      renda: toReais(d.expectedIncomeCents),
+      parcelasCents: d.installmentCents,
+      recorrentesCents: d.recurringExpenseCents,
+      commitmentCents,
+      expectedIncomeCents: d.expectedIncomeCents,
     };
   });
 
-  const showIncomeLine = averageIncomeCents > 0;
+  const anyIncome = chartData.some((d) => d.expectedIncomeCents > 0);
 
   return (
     <div className="h-[320px] w-full">
@@ -79,20 +81,44 @@ export function InstallmentsChart({ data, averageIncomeCents }: Props) {
               color: "var(--popover-foreground)",
             }}
             formatter={(value, name, item) => {
+              const p = item?.payload as (typeof chartData)[number] | undefined;
               if (name === "parcelas") {
-                const cents = Number(item?.payload?.parcelasCents ?? 0);
-                const pct = averageIncomeCents > 0 ? (cents / averageIncomeCents) * 100 : 0;
+                const cents = p?.parcelasCents ?? 0;
+                const pct =
+                  p && p.expectedIncomeCents > 0 ? (cents / p.expectedIncomeCents) * 100 : 0;
                 return [
                   `${formatMoney(cents)}${pct > 0 ? ` · ${pct.toFixed(0)}% da renda` : ""}`,
                   "Parcelas",
                 ];
               }
-              return [formatMoney(Math.round(Number(value ?? 0) * 100)), "Renda média"];
+              if (name === "recorrentes") {
+                const cents = p?.recorrentesCents ?? 0;
+                const pct =
+                  p && p.expectedIncomeCents > 0 ? (cents / p.expectedIncomeCents) * 100 : 0;
+                return [
+                  `${formatMoney(cents)}${pct > 0 ? ` · ${pct.toFixed(0)}% da renda` : ""}`,
+                  "Recorrentes",
+                ];
+              }
+              return [formatMoney(Math.round(Number(value ?? 0) * 100)), "Renda esperada"];
             }}
           />
           <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="parcelas" fill="#6366f1" radius={[4, 4, 0, 0]} name="Parcelas" />
-          {showIncomeLine ? (
+          <Bar
+            dataKey="parcelas"
+            stackId="commitment"
+            fill="#6366f1"
+            radius={[0, 0, 0, 0]}
+            name="Parcelas"
+          />
+          <Bar
+            dataKey="recorrentes"
+            stackId="commitment"
+            fill="#a78bfa"
+            radius={[4, 4, 0, 0]}
+            name="Recorrentes"
+          />
+          {anyIncome ? (
             <Line
               type="monotone"
               dataKey="renda"
@@ -100,7 +126,7 @@ export function InstallmentsChart({ data, averageIncomeCents }: Props) {
               strokeWidth={2}
               strokeDasharray="4 4"
               dot={false}
-              name="Renda média (3m)"
+              name="Renda esperada"
             />
           ) : null}
         </ComposedChart>

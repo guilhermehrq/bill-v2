@@ -3,6 +3,7 @@ import { format as formatMoney } from "@/lib/money";
 import type { ForecastData } from "../queries";
 import { InstallmentsChart } from "./installments-chart";
 import { InstallmentsTable } from "./installments-table";
+import { RecurrencesTable } from "./recurrences-table";
 
 type Props = {
   data: ForecastData;
@@ -24,17 +25,15 @@ const MONTH_LABELS = [
 ];
 
 export function ForecastView({ data }: Props) {
-  const { summary, monthly, purchases } = data;
-  const hasInstallments = purchases.length > 0;
+  const { summary, monthly, purchases, recurrences } = data;
 
-  const currentPct = pctOfIncome(
-    summary.currentMonthCommitmentCents,
-    summary.averageMonthlyIncomeCents,
-  );
-  const avgPct = pctOfIncome(
-    summary.averageNext6mCommitmentCents,
-    summary.averageMonthlyIncomeCents,
-  );
+  // Renda total esperada por mês = recorrente + média 3m não-recorrente.
+  // Usar isso como base do % pra alinhar com o que o gráfico mostra.
+  const referenceIncomeCents =
+    summary.averageMonthlyIncomeCents + summary.recurringIncomeMonthlyCents;
+
+  const currentPct = pctOfIncome(summary.currentMonthCommitmentCents, referenceIncomeCents);
+  const avgPct = pctOfIncome(summary.averageNext6mCommitmentCents, referenceIncomeCents);
 
   return (
     <div className="space-y-6 py-4">
@@ -42,7 +41,7 @@ export function ForecastView({ data }: Props) {
         <div>
           <h1 className="text-2xl font-semibold">Previsão</h1>
           <p className="text-muted-foreground text-sm">
-            Compromissos futuros de cartão e impacto na renda média.
+            Compromisso total (parcelas + recorrentes) e renda esperada por mês.
           </p>
         </div>
       </header>
@@ -61,36 +60,41 @@ export function ForecastView({ data }: Props) {
           tone={toneFor(avgPct)}
         />
         <SummaryCard
-          label="Compras ativas"
-          value={summary.activePurchaseCount.toString()}
-          hint={hasInstallments ? "parceladas em andamento" : "nada parcelado agora"}
+          label="Recorrentes/mês"
+          value={formatMoney(summary.recurringExpenseMonthlyCents)}
+          hint={
+            summary.activeRecurrenceCount > 0
+              ? `${summary.activeRecurrenceCount} ativas`
+              : "nenhuma cadastrada"
+          }
         />
         <SummaryCard
           label="Livre em"
           value={summary.lastInstallmentMonth ? formatMonthYear(summary.lastInstallmentMonth) : "—"}
-          hint={summary.lastInstallmentMonth ? "última parcela" : undefined}
+          hint={
+            summary.lastInstallmentMonth
+              ? `${summary.activePurchaseCount} compras parceladas`
+              : "nada parcelado agora"
+          }
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Parcelas mês a mês</CardTitle>
+          <CardTitle className="text-base">Compromisso mês a mês</CardTitle>
           <CardDescription>
-            {summary.averageMonthlyIncomeCents > 0 ? (
+            {referenceIncomeCents > 0 ? (
               <>
-                Linha verde = renda média dos últimos 3 meses (
-                {formatMoney(summary.averageMonthlyIncomeCents)})
+                Linha verde = renda esperada ({formatMoney(referenceIncomeCents)} médios —
+                recorrente + média 3m).
               </>
             ) : (
-              <>Cadastre receitas pra ver o comparativo com a renda média.</>
+              <>Cadastre receitas pra ver o comparativo com a renda esperada.</>
             )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <InstallmentsChart
-            data={monthly}
-            averageIncomeCents={summary.averageMonthlyIncomeCents}
-          />
+          <InstallmentsChart data={monthly} />
         </CardContent>
       </Card>
 
@@ -101,10 +105,19 @@ export function ForecastView({ data }: Props) {
           </h2>
           <p className="text-muted-foreground text-sm">Ordenadas pelo mês em que terminam.</p>
         </div>
-        <InstallmentsTable
-          purchases={purchases}
-          averageIncomeCents={summary.averageMonthlyIncomeCents}
-        />
+        <InstallmentsTable purchases={purchases} averageIncomeCents={referenceIncomeCents} />
+      </section>
+
+      <section aria-labelledby="recorrencias-heading" className="space-y-3">
+        <div>
+          <h2 id="recorrencias-heading" className="text-base font-medium">
+            Recorrências ativas
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Ordenadas pelo equivalente mensal projetado para os próximos meses.
+          </p>
+        </div>
+        <RecurrencesTable recurrences={recurrences} averageIncomeCents={referenceIncomeCents} />
       </section>
     </div>
   );
