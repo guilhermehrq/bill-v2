@@ -3,7 +3,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
+import { creditCardInvoices, creditCards, transactions } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import {
   createIncomeOrExpenseSchema,
@@ -123,6 +123,7 @@ export async function createTransactionAction(
   if (installmentTotal && installmentTotal > 1 && creditCardId) {
     const firstId = await createInstallments(uid, {
       creditCardId,
+      invoiceId: invoiceId ?? null,
       categoryId: categoryId ?? null,
       description,
       amountCents,
@@ -392,6 +393,7 @@ async function createInstallments(
   userId: string,
   params: {
     creditCardId: string;
+    invoiceId: string | null;
     categoryId: string | null;
     description: string;
     amountCents: number;
@@ -420,6 +422,45 @@ async function createInstallments(
     );
   }
 
+  // When the user explicitly chose an invoice for the first installment, derive the
+  // subsequent invoices by walking +i months from that reference month. Without this
+  // step the BEFORE INSERT trigger picks each invoice from the installment date, which
+  // ignores the user's choice (e.g. purchase right on the closing day landing on the
+  // previous month's invoice).
+  const explicitInvoiceIds: (string | null)[] = new Array(installmentTotal).fill(null);
+  if (params.invoiceId) {
+    const [card] = await db
+      .select({
+        closingDay: creditCards.closingDay,
+        dueDay: creditCards.dueDay,
+      })
+      .from(creditCards)
+      .where(and(eq(creditCards.id, params.creditCardId), eq(creditCards.userId, userId)))
+      .limit(1);
+    const [firstInvoice] = await db
+      .select({ referenceMonth: creditCardInvoices.referenceMonth })
+      .from(creditCardInvoices)
+      .where(
+        and(eq(creditCardInvoices.id, params.invoiceId), eq(creditCardInvoices.userId, userId)),
+      )
+      .limit(1);
+
+    if (!card || !firstInvoice) return null;
+
+    explicitInvoiceIds[0] = params.invoiceId;
+    for (let i = 1; i < installmentTotal; i++) {
+      const refMonth = addMonthsToReference(firstInvoice.referenceMonth, i);
+      const id = await getOrCreateInvoiceId(
+        userId,
+        params.creditCardId,
+        refMonth,
+        card.closingDay,
+        card.dueDay,
+      );
+      explicitInvoiceIds[i] = id;
+    }
+  }
+
   return await db.transaction(async (tx) => {
     const firstDate = installmentDates[0]!;
     const [first] = await tx
@@ -432,6 +473,7 @@ async function createInstallments(
         date: firstDate,
         purchaseDate: firstDate,
         creditCardId: params.creditCardId,
+        invoiceId: explicitInvoiceIds[0],
         categoryId: params.categoryId,
         isPaid: true,
         installmentNumber: 1,
@@ -453,6 +495,7 @@ async function createInstallments(
         // purchase_date is copied from the first row by trigger fn_set_purchase_date.
         purchaseDate: firstDate,
         creditCardId: params.creditCardId,
+        invoiceId: explicitInvoiceIds[i],
         categoryId: params.categoryId,
         isPaid: true,
         installmentOfId: first.id,
@@ -464,4 +507,93 @@ async function createInstallments(
 
     return first.id;
   });
+}
+
+function addMonthsToReference(referenceMonth: string, months: number): string {
+  // referenceMonth is YYYY-MM-DD (always day=01 from fn_assign_invoice).
+  const [y, m] = referenceMonth.split("-").map(Number) as [number, number];
+  const monthIndex = m - 1 + months;
+  const targetYear = y + Math.floor(monthIndex / 12);
+  const targetMonth = ((monthIndex % 12) + 12) % 12;
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-01`;
+}
+
+function computeInvoiceDates(
+  referenceMonth: string,
+  closingDay: number,
+  dueDay: number,
+): { closingDate: string; dueDate: string } {
+  const [y, m] = referenceMonth.split("-").map(Number) as [number, number];
+  const monthEnd = new Date(y, m, 0).getDate();
+  const nextYear = m === 12 ? y + 1 : y;
+  const nextMonth = m === 12 ? 1 : m + 1;
+  const nextMonthEnd = new Date(nextYear, nextMonth, 0).getDate();
+
+  const closingD = Math.min(closingDay, monthEnd);
+  const closingDate = `${y}-${String(m).padStart(2, "0")}-${String(closingD).padStart(2, "0")}`;
+
+  let dueDate: string;
+  if (dueDay > closingDay) {
+    const d = Math.min(dueDay, monthEnd);
+    dueDate = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  } else {
+    const d = Math.min(dueDay, nextMonthEnd);
+    dueDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  return { closingDate, dueDate };
+}
+
+async function getOrCreateInvoiceId(
+  userId: string,
+  cardId: string,
+  referenceMonth: string,
+  closingDay: number,
+  dueDay: number,
+): Promise<string> {
+  const [existing] = await db
+    .select({ id: creditCardInvoices.id })
+    .from(creditCardInvoices)
+    .where(
+      and(
+        eq(creditCardInvoices.userId, userId),
+        eq(creditCardInvoices.creditCardId, cardId),
+        eq(creditCardInvoices.referenceMonth, referenceMonth),
+      ),
+    )
+    .limit(1);
+  if (existing) return existing.id;
+
+  const { closingDate, dueDate } = computeInvoiceDates(referenceMonth, closingDay, dueDay);
+  const [created] = await db
+    .insert(creditCardInvoices)
+    .values({
+      userId,
+      creditCardId: cardId,
+      referenceMonth,
+      closingDate,
+      dueDate,
+      status: "open",
+    })
+    .onConflictDoNothing({
+      target: [creditCardInvoices.creditCardId, creditCardInvoices.referenceMonth],
+    })
+    .returning({ id: creditCardInvoices.id });
+
+  if (created) return created.id;
+
+  // Race condition: another connection inserted between the SELECT and INSERT.
+  const [reread] = await db
+    .select({ id: creditCardInvoices.id })
+    .from(creditCardInvoices)
+    .where(
+      and(
+        eq(creditCardInvoices.userId, userId),
+        eq(creditCardInvoices.creditCardId, cardId),
+        eq(creditCardInvoices.referenceMonth, referenceMonth),
+      ),
+    )
+    .limit(1);
+  if (!reread) throw new Error("Falha ao localizar fatura");
+  return reread.id;
 }
