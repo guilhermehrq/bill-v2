@@ -11,12 +11,11 @@ import { MoneyInput } from "@/components/ui/money-input";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -27,11 +26,11 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormCardOption } from "@/features/cards/queries";
-import { CategorySelectItems, categoryItems } from "@/features/categories/category-select";
 import { listOpenInvoicesAction } from "@/features/cards/invoice-actions";
 import type { InvoiceNavItem } from "@/features/cards/invoice-queries";
 import { createRecurrenceAction } from "@/features/recurrences/actions";
 import { ChevronDown, Repeat } from "lucide-react";
+import { getIconComponent } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import {
   createTransactionAction,
@@ -75,7 +74,11 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(
-    defaults.accountId ? { kind: "account", id: defaults.accountId } : null,
+    defaults.accountId
+      ? { kind: "account", id: defaults.accountId }
+      : defaults.cardId
+        ? { kind: "card", id: defaults.cardId }
+        : null,
   );
   const [destAccountId, setDestAccountId] = useState<string | null>(
     defaults.destinationAccountId ?? null,
@@ -107,9 +110,11 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       setPaymentTarget(
         defaults.accountId
           ? { kind: "account", id: defaults.accountId }
-          : accounts[0]
-            ? { kind: "account", id: accounts[0].id }
-            : null,
+          : defaults.cardId
+            ? { kind: "card", id: defaults.cardId }
+            : accounts[0]
+              ? { kind: "account", id: accounts[0].id }
+              : null,
       );
       setDestAccountId(defaults.destinationAccountId ?? null);
       setDate(new Date().toISOString().slice(0, 10));
@@ -160,6 +165,51 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   const filteredCategories = useMemo(
     () => categories.filter((c) => c.type === type || type === "transfer"),
     [categories, type],
+  );
+
+  const categoryOptions = useMemo<SearchableSelectItem[]>(
+    () => [{ value: "none", label: "Sem categoria" }, ...buildCategoryOptions(filteredCategories)],
+    [filteredCategories],
+  );
+
+  const accountAndCardOptions = useMemo<SearchableSelectItem[]>(
+    () => [
+      ...accounts.map((a) => ({
+        value: `${ACCOUNT_PREFIX}${a.id}`,
+        label: a.name,
+        group: "Contas",
+      })),
+      ...cards.map((c) => ({
+        value: `${CARD_PREFIX}${c.id}`,
+        label: c.name,
+        group: "Cartões",
+      })),
+    ],
+    [accounts, cards],
+  );
+
+  const sourceAccountOptions = useMemo<SearchableSelectItem[]>(
+    () => accounts.map((a) => ({ value: a.id, label: a.name })),
+    [accounts],
+  );
+
+  const destAccountOptions = useMemo<SearchableSelectItem[]>(
+    () =>
+      accounts
+        .filter((a) => paymentTarget?.kind !== "account" || a.id !== paymentTarget.id)
+        .map((a) => ({ value: a.id, label: a.name })),
+    [accounts, paymentTarget],
+  );
+
+  const invoiceOptions = useMemo<SearchableSelectItem[]>(
+    () => [
+      { value: "auto", label: "Automática (pela data)" },
+      ...openInvoices.map((inv) => ({
+        value: inv.id,
+        label: formatInvoiceLabel(inv),
+      })),
+    ],
+    [openInvoices],
   );
 
   const isCard = paymentTarget?.kind === "card";
@@ -375,22 +425,15 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           {type !== "transfer" && (
             <div className="space-y-2">
               <Label htmlFor="category">Categoria</Label>
-              <Select
+              <SearchableSelect
+                id="category"
                 value={categoryId ?? "none"}
-                onValueChange={(v) => setCategoryId(v === "none" ? null : v)}
-                items={categoryItems(filteredCategories, "none", "Sem categoria")}
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Sem categoria" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  <CategorySelectItems
-                    categories={filteredCategories}
-                    noneValue="none"
-                    noneLabel="Sem categoria"
-                  />
-                </SelectContent>
-              </Select>
+                onValueChange={(v) => setCategoryId(v === "none" || v === null ? null : v)}
+                items={categoryOptions}
+                placeholder="Sem categoria"
+                searchPlaceholder="Buscar categoria…"
+                emptyMessage="Nenhuma categoria encontrada"
+              />
             </div>
           )}
 
@@ -398,47 +441,29 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             <>
               <div className="space-y-2">
                 <Label htmlFor="source">De (origem) *</Label>
-                <Select
-                  value={paymentTarget?.kind === "account" ? paymentTarget.id : undefined}
+                <SearchableSelect
+                  id="source"
+                  value={paymentTarget?.kind === "account" ? paymentTarget.id : null}
                   onValueChange={(v) => setPaymentTarget(v ? { kind: "account", id: v } : null)}
                   disabled={Boolean(editingId)}
-                  items={accounts.map((a) => ({ value: a.id, label: a.name }))}
-                >
-                  <SelectTrigger id="source">
-                    <SelectValue placeholder="Selecione a conta de origem" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  items={sourceAccountOptions}
+                  placeholder="Selecione a conta de origem"
+                  searchPlaceholder="Buscar conta…"
+                  emptyMessage="Nenhuma conta encontrada"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="destination">Para (destino) *</Label>
-                <Select
-                  value={destAccountId ?? undefined}
+                <SearchableSelect
+                  id="destination"
+                  value={destAccountId}
                   onValueChange={(v) => setDestAccountId(v)}
                   disabled={Boolean(editingId)}
-                  items={accounts
-                    .filter((a) => paymentTarget?.kind !== "account" || a.id !== paymentTarget.id)
-                    .map((a) => ({ value: a.id, label: a.name }))}
-                >
-                  <SelectTrigger id="destination">
-                    <SelectValue placeholder="Selecione a conta de destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts
-                      .filter((a) => paymentTarget?.kind !== "account" || a.id !== paymentTarget.id)
-                      .map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                  items={destAccountOptions}
+                  placeholder="Selecione a conta de destino"
+                  searchPlaceholder="Buscar conta…"
+                  emptyMessage="Nenhuma conta encontrada"
+                />
               </div>
               {editingId && (
                 <p className="text-muted-foreground text-xs">
@@ -450,40 +475,15 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           ) : (
             <div className="space-y-2">
               <Label htmlFor="target">Conta/Cartão *</Label>
-              <Select
-                value={encodeTarget(paymentTarget)}
+              <SearchableSelect
+                id="target"
+                value={encodeTarget(paymentTarget) ?? null}
                 onValueChange={(v) => setPaymentTarget(decodeTarget(v))}
-                items={[
-                  ...accounts.map((a) => ({ value: `${ACCOUNT_PREFIX}${a.id}`, label: a.name })),
-                  ...cards.map((c) => ({ value: `${CARD_PREFIX}${c.id}`, label: c.name })),
-                ]}
-              >
-                <SelectTrigger id="target">
-                  <SelectValue placeholder="Selecione conta ou cartão" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  {accounts.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Contas</SelectLabel>
-                      {accounts.map((a) => (
-                        <SelectItem key={a.id} value={`${ACCOUNT_PREFIX}${a.id}`}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {cards.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Cartões</SelectLabel>
-                      {cards.map((c) => (
-                        <SelectItem key={c.id} value={`${CARD_PREFIX}${c.id}`}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
+                items={accountAndCardOptions}
+                placeholder="Selecione conta ou cartão"
+                searchPlaceholder="Buscar conta ou cartão…"
+                emptyMessage="Nada encontrado"
+              />
               {isCard && (
                 <p className="text-muted-foreground text-xs">
                   A transação entrará na fatura do mês correto automaticamente.
@@ -500,29 +500,15 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           {!editingId && isCard && (
             <div className="space-y-2">
               <Label htmlFor="invoice">Fatura</Label>
-              <Select
+              <SearchableSelect
+                id="invoice"
                 value={invoiceId ?? "auto"}
-                onValueChange={(v) => setInvoiceId(v === "auto" ? null : v)}
-                items={[
-                  { value: "auto", label: "Automática (pela data)" },
-                  ...openInvoices.map((inv) => ({
-                    value: inv.id,
-                    label: formatInvoiceLabel(inv),
-                  })),
-                ]}
-              >
-                <SelectTrigger id="invoice">
-                  <SelectValue placeholder="Automática" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  <SelectItem value="auto">Automática (pela data)</SelectItem>
-                  {openInvoices.map((inv) => (
-                    <SelectItem key={inv.id} value={inv.id}>
-                      {formatInvoiceLabel(inv)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(v) => setInvoiceId(v === "auto" || v === null ? null : v)}
+                items={invoiceOptions}
+                placeholder="Automática"
+                searchPlaceholder="Buscar fatura…"
+                emptyMessage="Nenhuma fatura encontrada"
+              />
               <p className="text-muted-foreground text-xs">
                 Em &ldquo;Automática&rdquo; o sistema escolhe a fatura pelo dia de fechamento.
               </p>
@@ -709,6 +695,89 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function buildCategoryOptions(categories: FormCategoryOption[]): SearchableSelectItem[] {
+  const parents = categories.filter((c) => !c.parentName);
+  const childrenByParent = new Map<string, FormCategoryOption[]>();
+  for (const c of categories) {
+    if (!c.parentName) continue;
+    const list = childrenByParent.get(c.parentName) ?? [];
+    list.push(c);
+    childrenByParent.set(c.parentName, list);
+  }
+
+  const out: SearchableSelectItem[] = [];
+  for (const parent of parents) {
+    out.push({
+      value: parent.id,
+      label: parent.name,
+      node: <CategoryNode category={parent} />,
+    });
+    for (const child of childrenByParent.get(parent.name) ?? []) {
+      out.push({
+        value: child.id,
+        label: child.name,
+        keywords: parent.name,
+        node: <CategoryNode category={child} indent />,
+      });
+    }
+  }
+
+  // Children whose parent isn't in the list (parent archived, etc.)
+  for (const [parentName, kids] of childrenByParent) {
+    if (parents.some((p) => p.name === parentName)) continue;
+    for (const child of kids) {
+      out.push({
+        value: child.id,
+        label: child.name,
+        keywords: parentName,
+        node: <CategoryNode category={child} indent />,
+      });
+    }
+  }
+
+  return out;
+}
+
+function CategoryNode({ category, indent }: { category: FormCategoryOption; indent?: boolean }) {
+  const Icon = indent ? null : getIconComponent(category.icon ?? null);
+  const color = indent
+    ? (category.parentColor ?? category.color ?? "var(--muted-foreground)")
+    : (category.color ?? "var(--muted-foreground)");
+
+  if (indent) {
+    return (
+      <span className="flex items-center gap-2 pl-5 text-sm">
+        <span className="text-muted-foreground" aria-hidden>
+          └
+        </span>
+        <span
+          className="inline-block size-1.5 rounded-full"
+          style={{ backgroundColor: color }}
+          aria-hidden
+        />
+        {category.name}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-2 font-medium">
+      <span
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded"
+        style={{ color }}
+        aria-hidden
+      >
+        {Icon ? (
+          <Icon className="size-4" />
+        ) : (
+          <span className="block size-2 rounded-full" style={{ backgroundColor: color }} />
+        )}
+      </span>
+      {category.name}
+    </span>
   );
 }
 

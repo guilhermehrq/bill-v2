@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   Dialog,
@@ -25,14 +25,30 @@ const ENTRIES: Entry[] = [
   { keys: ["G", "S"], description: "Ir para Configurações", group: "Navegação" },
 ];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function defaultsFromPathname(pathname: string | null) {
+  if (!pathname) return undefined;
+  const accountId = pathname.match(/^\/contas\/([^/]+)/)?.[1];
+  if (accountId && UUID_RE.test(accountId)) return { accountId };
+  const cardId = pathname.match(/^\/cartoes\/([^/]+)/)?.[1];
+  if (cardId && UUID_RE.test(cardId)) return { cardId };
+  return undefined;
+}
+
 export function KeyboardShortcuts() {
   const router = useRouter();
+  const pathname = usePathname();
   const openDrawer = useTransactionDrawer((s) => s.openCreate);
   const [helpOpen, setHelpOpen] = useState(false);
 
   const shortcuts = useMemo<Shortcut[]>(
     () => [
-      { keys: "n", description: "Nova transação", handler: () => openDrawer() },
+      {
+        keys: "n",
+        description: "Nova transação",
+        handler: () => openDrawer(defaultsFromPathname(pathname)),
+      },
       { keys: "?", description: "Mostrar atalhos", handler: () => setHelpOpen(true) },
       { keys: "g d", description: "Dashboard", handler: () => router.push("/") },
       { keys: "g t", description: "Extrato", handler: () => router.push("/extrato") },
@@ -41,7 +57,7 @@ export function KeyboardShortcuts() {
       { keys: "g c", description: "Contas", handler: () => router.push("/contas") },
       { keys: "g s", description: "Configurações", handler: () => router.push("/configuracoes") },
     ],
-    [router, openDrawer],
+    [router, openDrawer, pathname],
   );
 
   useKeyboardShortcuts(shortcuts);

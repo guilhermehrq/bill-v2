@@ -6,6 +6,7 @@ import type { TransactionTypeValue } from "./types";
 type Defaults = {
   type?: TransactionTypeValue;
   accountId?: string;
+  cardId?: string;
   destinationAccountId?: string;
 };
 
