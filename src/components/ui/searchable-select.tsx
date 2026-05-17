@@ -62,7 +62,7 @@ export function SearchableSelect({
     [items, value],
   );
 
-  const grouped = React.useMemo(() => {
+  const { rootItems, hasGroups } = React.useMemo(() => {
     const groupMap = new Map<string, SearchableSelectItem[]>();
     const ungrouped: SearchableSelectItem[] = [];
     for (const item of items) {
@@ -74,12 +74,22 @@ export function SearchableSelect({
         ungrouped.push(item);
       }
     }
-    return { groupMap, ungrouped, hasGroups: groupMap.size > 0 };
+    if (groupMap.size > 0) {
+      const groups: Array<{ name: string; items: SearchableSelectItem[] }> = [];
+      for (const [name, groupItems] of groupMap) {
+        groups.push({ name, items: groupItems });
+      }
+      if (ungrouped.length > 0) {
+        groups.push({ name: "Outros", items: ungrouped });
+      }
+      return { rootItems: groups, hasGroups: true };
+    }
+    return { rootItems: items, hasGroups: false };
   }, [items]);
 
   return (
     <Combobox.Root<SearchableSelectItem>
-      items={items}
+      items={rootItems}
       value={selected}
       onValueChange={(v) => onValueChange(v?.value ?? null)}
       isItemEqualToValue={(a, b) => a.value === b.value}
@@ -126,11 +136,11 @@ export function SearchableSelect({
             </div>
 
             <Combobox.List className="flex-1 overflow-y-auto p-1">
-              {grouped.hasGroups
-                ? Array.from(grouped.groupMap.entries()).map(([groupName, groupItems]) => (
-                    <Combobox.Group key={groupName} items={groupItems} className="scroll-my-1">
+              {hasGroups
+                ? (group: { name: string; items: SearchableSelectItem[] }) => (
+                    <Combobox.Group key={group.name} items={group.items} className="scroll-my-1">
                       <Combobox.GroupLabel className="text-muted-foreground px-1.5 py-1 text-xs">
-                        {groupName}
+                        {group.name}
                       </Combobox.GroupLabel>
                       <Combobox.Collection>
                         {(item: SearchableSelectItem) => (
@@ -138,8 +148,8 @@ export function SearchableSelect({
                         )}
                       </Combobox.Collection>
                     </Combobox.Group>
-                  ))
-                : grouped.ungrouped.map((item) => <SearchableItem key={item.value} item={item} />)}
+                  )
+                : (item: SearchableSelectItem) => <SearchableItem key={item.value} item={item} />}
             </Combobox.List>
 
             <Combobox.Empty className="text-muted-foreground px-3 py-6 text-center text-xs">
