@@ -234,7 +234,25 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
     };
   }, [cardId, editingId]);
 
-  function handleSubmit() {
+  function resetFormKeepingTarget() {
+    setAmountCents(0);
+    setDescription("");
+    setCategoryId(null);
+    setDestAccountId(null);
+    setDate(new Date().toISOString().slice(0, 10));
+    setIsPaid(true);
+    setNotes("");
+    setInstallments(1);
+    setInvoiceId(null);
+    setRepeatEnabled(false);
+    setRepeatExpanded(false);
+    setRepeatFrequency("monthly");
+    setRepeatInterval(1);
+    setRepeatEndDate("");
+    setError(null);
+  }
+
+  function handleSubmit(opts?: { keepOpen?: boolean }) {
     setError(null);
 
     if (amountCents <= 0) {
@@ -262,6 +280,8 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       setError("Informe a conta ou cartão");
       return;
     }
+
+    const keepOpen = opts?.keepOpen ?? false;
 
     startTransition(async () => {
       if (editingId) {
@@ -302,7 +322,8 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           return;
         }
         toast.success("Transferência registrada");
-        close();
+        if (keepOpen) resetFormKeepingTarget();
+        else close();
         return;
       }
 
@@ -358,7 +379,8 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           isCardExpense ? `Parcelamento em ${installments}x registrado` : "Transação criada",
         );
       }
-      close();
+      if (keepOpen) resetFormKeepingTarget();
+      else close();
     });
   }
 
@@ -691,12 +713,22 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
           </div>
         </div>
 
-        <SheetFooter className="flex-row justify-end gap-2 border-t">
+        <SheetFooter className="flex-row flex-wrap justify-end gap-2 border-t">
           <Button type="button" variant="outline" onClick={close}>
             Cancelar
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "Salvando..." : editingId ? "Salvar" : "Criar"}
+          {!editingId && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => handleSubmit({ keepOpen: true })}
+              disabled={isPending}
+            >
+              {isPending ? "Salvando..." : "Salvar e criar outra"}
+            </Button>
+          )}
+          <Button type="button" onClick={() => handleSubmit()} disabled={isPending}>
+            {isPending ? "Salvando..." : "Salvar"}
           </Button>
         </SheetFooter>
       </SheetContent>
