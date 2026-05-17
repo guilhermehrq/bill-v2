@@ -59,6 +59,7 @@ export const updateTransactionSchema = z.object({
     .optional(),
   accountId: z.string().uuid().nullable().optional(),
   creditCardId: z.string().uuid().nullable().optional(),
+  invoiceId: z.string().uuid().nullable().optional(),
   categoryId: z.string().uuid().nullable().optional(),
   isPaid: z.boolean().optional(),
   notes: z.string().trim().nullable().optional(),

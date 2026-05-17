@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { TransactionListItem } from "@/features/transactions/list-queries";
+import { NewTransactionTrigger } from "@/features/transactions/new-transaction-trigger";
+import { TransactionsList } from "@/features/transactions/transactions-list";
 import { format } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { InvoiceDetail, InvoiceNavItem } from "./invoice-queries";
@@ -24,6 +27,7 @@ type Props = {
   currentMonth: string;
   invoices: InvoiceNavItem[];
   accounts: Array<{ id: string; name: string }>;
+  transactions: TransactionListItem[];
 };
 
 const STATUS_TONE: Record<
@@ -37,7 +41,14 @@ const STATUS_TONE: Record<
   overdue: "expense",
 };
 
-export function InvoiceDetailView({ invoice, card, currentMonth, invoices, accounts }: Props) {
+export function InvoiceDetailView({
+  invoice,
+  card,
+  currentMonth,
+  invoices,
+  accounts,
+  transactions,
+}: Props) {
   const [payOpen, setPayOpen] = useState(false);
 
   const currentIndex = invoices.findIndex((i) => i.referenceMonth === currentMonth);
@@ -177,42 +188,19 @@ export function InvoiceDetailView({ invoice, card, currentMonth, invoices, accou
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Transações ({invoice.transactions.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="divide-y p-0">
-              {invoice.transactions.length === 0 ? (
-                <p className="text-muted-foreground p-4 text-sm">Nenhuma transação nesta fatura.</p>
-              ) : (
-                invoice.transactions.map((t) => (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-2">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: t.category?.color ?? "#6366f1" }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{t.description}</p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {t.category?.parentName
-                          ? `${t.category.parentName} › ${t.category.name}`
-                          : (t.category?.name ?? "Sem categoria")}
-                        {t.installmentTotal && ` · ${t.installmentNumber}/${t.installmentTotal}`}
-                      </p>
-                    </div>
-                    <p className="tabular text-muted-foreground shrink-0 text-xs">
-                      {formatDate(t.date)}
-                    </p>
-                    <p className="tabular shrink-0 text-sm font-semibold">
-                      {format(t.amountCents)}
-                    </p>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-base font-medium">Transações ({transactions.length})</h2>
+              <NewTransactionTrigger size="sm" variant="outline" cardId={card.id} label="Nova" />
+            </div>
+            {transactions.length === 0 ? (
+              <Card className="p-6 text-center">
+                <p className="text-muted-foreground text-sm">Nenhuma transação nesta fatura.</p>
+              </Card>
+            ) : (
+              <TransactionsList items={transactions} />
+            )}
+          </section>
 
           <PayInvoiceDialog
             open={payOpen}

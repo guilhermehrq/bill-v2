@@ -6,7 +6,11 @@ import { z } from "zod";
 import { db } from "@/db";
 import { accounts, creditCardInvoices, creditCards, transactions } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
-import { listOpenInvoicesForCard, type InvoiceNavItem } from "./invoice-queries";
+import {
+  listInvoicesForCard,
+  listOpenInvoicesForCard,
+  type InvoiceNavItem,
+} from "./invoice-queries";
 
 type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -16,6 +20,13 @@ export async function listOpenInvoicesAction(
   const uid = await requireUserId();
   if (typeof uid !== "string") return { ok: false, error: uid.error };
   const invoices = await listOpenInvoicesForCard(uid, cardId);
+  return { ok: true, data: invoices };
+}
+
+export async function listInvoicesAction(cardId: string): Promise<ActionResult<InvoiceNavItem[]>> {
+  const uid = await requireUserId();
+  if (typeof uid !== "string") return { ok: false, error: uid.error };
+  const invoices = await listInvoicesForCard(uid, cardId);
   return { ok: true, data: invoices };
 }
 

@@ -13,7 +13,8 @@
       "Read(//tmp/**)",
       "Bash(curl -sS -o /tmp/login.html -w \"HTTP %{http_code}\\\\nSIZE %{size_download}\\\\n\" http://localhost:3000/login)",
       "Bash(curl -sS http://localhost:3000/relatorios -L -o /dev/null -w \"HTTP %{http_code} \\(%{num_redirects} redirects\\)\\\\n\")",
-      "mcp__postgres__list_connections"
+      "mcp__postgres__list_connections",
+      "Bash(rtk ls *)"
     ]
   }
 }

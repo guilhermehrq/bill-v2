@@ -3,6 +3,7 @@ import { CardOverview } from "@/features/cards/card-overview";
 import { InvoiceDetailView } from "@/features/cards/invoice-detail";
 import { getInvoiceByMonth, listInvoicesForCard } from "@/features/cards/invoice-queries";
 import { listCardsWithCurrentInvoice } from "@/features/cards/queries";
+import { searchTransactions } from "@/features/transactions/list-queries";
 import { listFormAccountOptions } from "@/features/transactions/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -66,6 +67,10 @@ export default async function CardDetailPage({
   if (/^\d{4}-\d{2}$/.test(month)) month = `${month}-01`;
   const invoice = await getInvoiceByMonth(user.id, cardId, month);
 
+  const invoiceTransactions = invoice
+    ? (await searchTransactions(user.id, { invoiceIds: [invoice.id] }, 0)).items
+    : [];
+
   return (
     <div className="py-4">
       <InvoiceDetailView
@@ -81,6 +86,7 @@ export default async function CardDetailPage({
         currentMonth={month}
         invoices={invoices}
         accounts={accounts}
+        transactions={invoiceTransactions}
       />
     </div>
   );

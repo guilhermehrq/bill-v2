@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormCardOption } from "@/features/cards/queries";
-import { listOpenInvoicesAction } from "@/features/cards/invoice-actions";
+import { listInvoicesAction, listOpenInvoicesAction } from "@/features/cards/invoice-actions";
 import type { InvoiceNavItem } from "@/features/cards/invoice-queries";
 import { createRecurrenceAction } from "@/features/recurrences/actions";
 import { ChevronDown, Repeat } from "lucide-react";
@@ -155,6 +155,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       setDate(t.date);
       setIsPaid(t.isPaid);
       setNotes(t.notes ?? "");
+      setInvoiceId(t.invoiceId);
     });
 
     return () => {
@@ -203,13 +204,13 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
   const invoiceOptions = useMemo<SearchableSelectItem[]>(
     () => [
-      { value: "auto", label: "Automática (pela data)" },
+      ...(editingId ? [] : [{ value: "auto", label: "Automática (pela data)" }]),
       ...openInvoices.map((inv) => ({
         value: inv.id,
         label: formatInvoiceLabel(inv),
       })),
     ],
-    [openInvoices],
+    [openInvoices, editingId],
   );
 
   const isCard = paymentTarget?.kind === "card";
@@ -222,7 +223,8 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
       return;
     }
     let cancelled = false;
-    listOpenInvoicesAction(cardId).then((result) => {
+    const action = editingId ? listInvoicesAction : listOpenInvoicesAction;
+    action(cardId).then((result) => {
       if (cancelled) return;
       if (result.ok) setOpenInvoices(result.data);
       else setOpenInvoices([]);
@@ -230,7 +232,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [cardId]);
+  }, [cardId, editingId]);
 
   function handleSubmit() {
     setError(null);
@@ -263,13 +265,15 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
 
     startTransition(async () => {
       if (editingId) {
+        const isCardEdit = paymentTarget?.kind === "card";
         const result = await updateTransactionAction(editingId, {
           description: finalDescription,
           amountCents,
           date,
           categoryId,
           accountId: paymentTarget?.kind === "account" ? paymentTarget.id : null,
-          creditCardId: paymentTarget?.kind === "card" ? paymentTarget.id : null,
+          creditCardId: isCardEdit ? paymentTarget.id : null,
+          invoiceId: isCardEdit ? invoiceId : null,
           isPaid,
           notes: notes.trim() || null,
         });
@@ -497,7 +501,7 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
             <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
-          {!editingId && isCard && (
+          {isCard && (
             <div className="space-y-2">
               <Label htmlFor="invoice">Fatura</Label>
               <SearchableSelect
@@ -510,7 +514,9 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
                 emptyMessage="Nenhuma fatura encontrada"
               />
               <p className="text-muted-foreground text-xs">
-                Em &ldquo;Automática&rdquo; o sistema escolhe a fatura pelo dia de fechamento.
+                {editingId
+                  ? "Trocar a fatura move a transação para outro mês de cobrança."
+                  : "Em “Automática” o sistema escolhe a fatura pelo dia de fechamento."}
               </p>
             </div>
           )}

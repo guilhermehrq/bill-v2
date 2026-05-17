@@ -25,6 +25,7 @@ export type TransactionFilters = {
   to?: string | undefined;
   accountIds?: string[] | undefined;
   cardIds?: string[] | undefined;
+  invoiceIds?: string[] | undefined;
   categoryIds?: string[] | undefined;
   types?: ("income" | "expense" | "transfer")[] | undefined;
   search?: string | undefined;
@@ -84,6 +85,8 @@ export async function searchTransactions(
     clauses.push(inArray(transactions.accountId, filters.accountIds));
   if (filters.cardIds && filters.cardIds.length > 0)
     clauses.push(inArray(transactions.creditCardId, filters.cardIds));
+  if (filters.invoiceIds && filters.invoiceIds.length > 0)
+    clauses.push(inArray(transactions.invoiceId, filters.invoiceIds));
   if (filters.categoryIds && filters.categoryIds.length > 0)
     clauses.push(inArray(transactions.categoryId, filters.categoryIds));
   if (filters.search && filters.search.trim().length > 0) {

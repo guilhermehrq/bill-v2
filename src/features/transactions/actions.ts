@@ -199,11 +199,12 @@ export async function updateTransactionAction(
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes ?? null;
   if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
 
-  // accountId / creditCardId are per-row (transfers mirror the rest only).
+  // accountId / creditCardId / invoiceId are per-row (transfers mirror the rest only).
   const perRowUpdates = { ...updates };
   if (parsed.data.accountId !== undefined) perRowUpdates.accountId = parsed.data.accountId ?? null;
   if (parsed.data.creditCardId !== undefined)
     perRowUpdates.creditCardId = parsed.data.creditCardId ?? null;
+  if (parsed.data.invoiceId !== undefined) perRowUpdates.invoiceId = parsed.data.invoiceId ?? null;
 
   const targetIds = existing.type === "transfer" && existing.pairId ? [id, existing.pairId] : [id];
 
@@ -245,6 +246,7 @@ export async function loadTransactionForEditAction(
       notes: transactions.notes,
       accountId: transactions.accountId,
       creditCardId: transactions.creditCardId,
+      invoiceId: transactions.invoiceId,
       categoryId: transactions.categoryId,
       transferPairId: transactions.transferPairId,
       transferDirection: transactions.transferDirection,
@@ -277,6 +279,7 @@ export async function loadTransactionForEditAction(
       notes: row.notes,
       accountId: row.accountId,
       creditCardId: row.creditCardId,
+      invoiceId: row.invoiceId,
       categoryId: row.categoryId,
       transferDirection: row.transferDirection,
       transferPairAccountId: mirrorAccountId,
@@ -294,6 +297,7 @@ export type TransactionForEdit = {
   notes: string | null;
   accountId: string | null;
   creditCardId: string | null;
+  invoiceId: string | null;
   categoryId: string | null;
   transferDirection: "in" | "out" | null;
   transferPairAccountId: string | null;
