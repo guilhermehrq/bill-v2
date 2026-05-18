@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { accounts, categories, creditCardInvoices, transactions } from "@/db/schema";
+import { accounts, categories, creditCardInvoices, creditCards, transactions } from "@/db/schema";
 import type { CreditCardReportMode } from "@/features/settings/queries";
 import { notInvoicePayment } from "@/features/transactions/invoice-payment";
 
@@ -99,22 +99,29 @@ export async function loadDashboard(
   const activeAccountCount = Number(balanceRow?.count ?? 0);
 
   // Open invoices total (open + closed + partial + overdue, NOT paid).
-  // Sum of remaining = totalCents - paidCents.
-  // Excludes invoices for future billing cycles (reference_month > current month):
-  // those represent parcels not yet charged and would inflate "fatura acumulada"
-  // beyond what is actually owed today.
+  // Sum of remaining = totalCents - paidCents. Limited to invoices up to each
+  // card's current cycle: the reference month whose closing day still hasn't
+  // passed. Future cycles (e.g. installment 2/3 already posted to next month)
+  // are excluded because they aren't owed yet.
   const [openInvoicesRow] = (await db
     .select({
       total: sql<number>`COALESCE(SUM(${creditCardInvoices.totalCents} - ${creditCardInvoices.paidCents}), 0)::bigint`,
       count: sql<number>`COUNT(*)::int`,
     })
     .from(creditCardInvoices)
+    .innerJoin(creditCards, eq(creditCardInvoices.creditCardId, creditCards.id))
     .where(
       and(
         eq(creditCardInvoices.userId, userId),
         sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
         sql`${creditCardInvoices.totalCents} > ${creditCardInvoices.paidCents}`,
-        lte(creditCardInvoices.referenceMonth, currentMonthStart),
+        sql`${creditCardInvoices.referenceMonth} <= (
+          CASE
+            WHEN EXTRACT(DAY FROM CURRENT_DATE)::smallint <= ${creditCards.closingDay}
+              THEN date_trunc('month', CURRENT_DATE)::date
+            ELSE (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month')::date
+          END
+        )`,
       ),
     )) as [{ total: number | string; count: number }];
 
