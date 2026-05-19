@@ -58,22 +58,22 @@ export function CategoryNode({
 
   if (indent) {
     return (
-      <span className="flex items-center gap-2 pl-5 text-sm">
-        <span className="text-muted-foreground" aria-hidden>
+      <span className="flex min-w-0 items-center gap-2 pl-5 text-sm">
+        <span className="text-muted-foreground shrink-0" aria-hidden>
           └
         </span>
         <span
-          className="inline-block size-1.5 rounded-full"
+          className="inline-block size-1.5 shrink-0 rounded-full"
           style={{ backgroundColor: color }}
           aria-hidden
         />
-        {category.name}
+        <span className="truncate">{category.name}</span>
       </span>
     );
   }
 
   return (
-    <span className="flex items-center gap-2 font-medium">
+    <span className="flex min-w-0 items-center gap-2 font-medium">
       <span
         className="inline-flex size-5 shrink-0 items-center justify-center rounded"
         style={{ color }}
@@ -85,7 +85,7 @@ export function CategoryNode({
           <span className="block size-2 rounded-full" style={{ backgroundColor: color }} />
         )}
       </span>
-      {category.name}
+      <span className="truncate">{category.name}</span>
     </span>
   );
 }

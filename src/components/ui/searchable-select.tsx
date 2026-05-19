@@ -135,7 +135,7 @@ export function SearchableSelect({
               />
             </div>
 
-            <Combobox.List className="flex-1 overflow-y-auto p-1">
+            <Combobox.List className="flex-1 overflow-x-hidden overflow-y-auto p-1">
               {hasGroups
                 ? (group: { name: string; items: SearchableSelectItem[] }) => (
                     <Combobox.Group key={group.name} items={group.items} className="scroll-my-1">
@@ -168,8 +168,8 @@ function SearchableItem({ item }: { item: SearchableSelectItem }) {
       value={item}
       className="focus:bg-accent focus:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
     >
-      <span className="flex flex-1 shrink-0 items-center gap-2 whitespace-nowrap">
-        {item.node ?? item.label}
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        {item.node ?? <span className="truncate">{item.label}</span>}
       </span>
       <Combobox.ItemIndicator className="pointer-events-none absolute right-2 flex size-4 items-center justify-center">
         <CheckIcon className="size-4" />
