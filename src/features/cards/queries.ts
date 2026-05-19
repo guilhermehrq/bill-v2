@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, creditCardInvoices, creditCards } from "@/db/schema";
+import { deriveInvoiceStatus, type DerivedInvoiceStatus } from "./invoice-status";
 
 export type CardWithInvoice = {
   id: string;
@@ -21,7 +22,8 @@ export type CardWithInvoice = {
     paidCents: number;
     closingDate: string;
     dueDate: string;
-    status: "open" | "closed" | "paid" | "overdue" | "partial";
+    referenceMonth: string;
+    status: DerivedInvoiceStatus;
   } | null;
   limitUsedPct: number;
 };
@@ -57,11 +59,11 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
     .select({
       id: creditCardInvoices.id,
       cardId: creditCardInvoices.creditCardId,
+      referenceMonth: creditCardInvoices.referenceMonth,
       totalCents: creditCardInvoices.totalCents,
       paidCents: creditCardInvoices.paidCents,
       closingDate: creditCardInvoices.closingDate,
       dueDate: creditCardInvoices.dueDate,
-      status: creditCardInvoices.status,
     })
     .from(creditCardInvoices)
     .where(
@@ -81,6 +83,7 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
   return rows.map((r) => {
     const invoice = currentByCard.get(r.id);
     const totalInvoice = invoice ? Number(invoice.totalCents) : 0;
+    const paidInvoice = invoice ? Number(invoice.paidCents) : 0;
     return {
       id: r.id,
       name: r.name,
@@ -97,10 +100,18 @@ export async function listCardsWithCurrentInvoice(userId: string): Promise<CardW
         ? {
             id: invoice.id,
             totalCents: totalInvoice,
-            paidCents: Number(invoice.paidCents),
+            paidCents: paidInvoice,
             closingDate: invoice.closingDate,
             dueDate: invoice.dueDate,
-            status: invoice.status,
+            referenceMonth: invoice.referenceMonth,
+            status: deriveInvoiceStatus(
+              {
+                paidCents: paidInvoice,
+                totalCents: totalInvoice,
+                referenceMonth: invoice.referenceMonth,
+              },
+              r.closingDay,
+            ),
           }
         : null,
       limitUsedPct:

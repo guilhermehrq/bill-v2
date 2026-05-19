@@ -98,11 +98,15 @@ export async function loadDashboard(
   const totalBalanceCents = Number(balanceRow?.total ?? 0) + Number(balanceDeltaRow?.delta ?? 0);
   const activeAccountCount = Number(balanceRow?.count ?? 0);
 
-  // Open invoices total (open + closed + partial + overdue, NOT paid).
-  // Sum of remaining = totalCents - paidCents. Limited to invoices up to each
-  // card's current cycle: the reference month whose closing day still hasn't
-  // passed. Future cycles (e.g. installment 2/3 already posted to next month)
-  // are excluded because they aren't owed yet.
+  // Open invoices total (current cycle + past unpaid). Excludes:
+  //   - paid (paid_cents >= total_cents)
+  //   - partial (any prior partial payment) — by convention the leftover is
+  //     expected to roll into the next invoice, not counted again here
+  //   - future cycles (reference_month after the card's current cycle, e.g.
+  //     installment parcels already posted to next month)
+  // Stored status is intentionally not used: it's not refreshed when a closing
+  // date passes (no cron), so deriving from the numeric columns is the source
+  // of truth.
   const [openInvoicesRow] = (await db
     .select({
       total: sql<number>`COALESCE(SUM(${creditCardInvoices.totalCents} - ${creditCardInvoices.paidCents}), 0)::bigint`,
@@ -113,8 +117,8 @@ export async function loadDashboard(
     .where(
       and(
         eq(creditCardInvoices.userId, userId),
-        sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
         sql`${creditCardInvoices.totalCents} > ${creditCardInvoices.paidCents}`,
+        sql`${creditCardInvoices.paidCents} = 0`,
         sql`${creditCardInvoices.referenceMonth} <= (
           CASE
             WHEN EXTRACT(DAY FROM CURRENT_DATE)::smallint <= ${creditCards.closingDay}

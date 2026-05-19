@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, creditCardInvoices, creditCards, transactions } from "@/db/schema";
+import { deriveInvoiceStatus, type DerivedInvoiceStatus } from "./invoice-status";
 
 export type InvoiceTransaction = {
   id: string;
@@ -27,7 +28,7 @@ export type InvoiceDetail = {
   referenceMonth: string;
   closingDate: string;
   dueDate: string;
-  status: "open" | "closed" | "paid" | "overdue" | "partial";
+  status: DerivedInvoiceStatus;
   totalCents: number;
   paidCents: number;
   transactions: InvoiceTransaction[];
@@ -44,7 +45,7 @@ export type InvoiceNavItem = {
   referenceMonth: string;
   totalCents: number;
   paidCents: number;
-  status: "open" | "closed" | "paid" | "overdue" | "partial";
+  status: DerivedInvoiceStatus;
 };
 
 // Loads the invoice for a card + reference month. If the invoice doesn't
@@ -142,6 +143,7 @@ export async function getInvoiceByMonth(
     }))
     .sort((a, b) => b.totalCents - a.totalCents);
 
+  const paidCents = Number(invoiceRow.paidCents);
   return {
     id: invoiceRow.id,
     cardId: cardRow.id,
@@ -154,9 +156,12 @@ export async function getInvoiceByMonth(
     referenceMonth: invoiceRow.referenceMonth,
     closingDate: invoiceRow.closingDate,
     dueDate: invoiceRow.dueDate,
-    status: invoiceRow.status,
+    status: deriveInvoiceStatus(
+      { paidCents, totalCents: total, referenceMonth: invoiceRow.referenceMonth },
+      cardRow.closingDay,
+    ),
     totalCents: total,
-    paidCents: Number(invoiceRow.paidCents),
+    paidCents,
     transactions: items,
     byCategory,
   };
@@ -172,22 +177,30 @@ export async function listInvoicesForCard(
       referenceMonth: creditCardInvoices.referenceMonth,
       totalCents: creditCardInvoices.totalCents,
       paidCents: creditCardInvoices.paidCents,
-      status: creditCardInvoices.status,
+      closingDay: creditCards.closingDay,
     })
     .from(creditCardInvoices)
+    .innerJoin(creditCards, eq(creditCardInvoices.creditCardId, creditCards.id))
     .where(and(eq(creditCardInvoices.userId, userId), eq(creditCardInvoices.creditCardId, cardId)))
     .orderBy(desc(creditCardInvoices.referenceMonth));
 
-  return rows.map((r) => ({
-    id: r.id,
-    referenceMonth: r.referenceMonth,
-    totalCents: Number(r.totalCents),
-    paidCents: Number(r.paidCents),
-    status: r.status,
-  }));
+  return rows.map((r) => {
+    const totalCents = Number(r.totalCents);
+    const paidCents = Number(r.paidCents);
+    return {
+      id: r.id,
+      referenceMonth: r.referenceMonth,
+      totalCents,
+      paidCents,
+      status: deriveInvoiceStatus(
+        { paidCents, totalCents, referenceMonth: r.referenceMonth },
+        r.closingDay,
+      ),
+    };
+  });
 }
 
-// Lists invoices the user can still post transactions to: open + closed (not yet paid).
+// Lists invoices the user can still post transactions to: anything not fully paid.
 // Sorted by reference month ascending so the soonest-to-close fatura comes first.
 export async function listOpenInvoicesForCard(
   userId: string,
@@ -199,25 +212,33 @@ export async function listOpenInvoicesForCard(
       referenceMonth: creditCardInvoices.referenceMonth,
       totalCents: creditCardInvoices.totalCents,
       paidCents: creditCardInvoices.paidCents,
-      status: creditCardInvoices.status,
+      closingDay: creditCards.closingDay,
     })
     .from(creditCardInvoices)
+    .innerJoin(creditCards, eq(creditCardInvoices.creditCardId, creditCards.id))
     .where(
       and(
         eq(creditCardInvoices.userId, userId),
         eq(creditCardInvoices.creditCardId, cardId),
-        sql`${creditCardInvoices.status} IN ('open', 'closed', 'partial', 'overdue')`,
+        sql`(${creditCardInvoices.totalCents} = 0 OR ${creditCardInvoices.paidCents} < ${creditCardInvoices.totalCents})`,
       ),
     )
     .orderBy(asc(creditCardInvoices.referenceMonth));
 
-  return rows.map((r) => ({
-    id: r.id,
-    referenceMonth: r.referenceMonth,
-    totalCents: Number(r.totalCents),
-    paidCents: Number(r.paidCents),
-    status: r.status,
-  }));
+  return rows.map((r) => {
+    const totalCents = Number(r.totalCents);
+    const paidCents = Number(r.paidCents);
+    return {
+      id: r.id,
+      referenceMonth: r.referenceMonth,
+      totalCents,
+      paidCents,
+      status: deriveInvoiceStatus(
+        { paidCents, totalCents, referenceMonth: r.referenceMonth },
+        r.closingDay,
+      ),
+    };
+  });
 }
 
 export async function getCurrentInvoiceMonth(

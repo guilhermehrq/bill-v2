@@ -11,7 +11,7 @@ import { TransactionsList } from "@/features/transactions/transactions-list";
 import { format } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { InvoiceDetail, InvoiceNavItem } from "./invoice-queries";
-import { deriveInvoiceStatus, INVOICE_STATUS_LABEL } from "./invoice-status";
+import { INVOICE_STATUS_LABEL, type DerivedInvoiceStatus } from "./invoice-status";
 import { PayInvoiceDialog } from "./pay-invoice-dialog";
 
 type Props = {
@@ -30,10 +30,7 @@ type Props = {
   transactions: TransactionListItem[];
 };
 
-const STATUS_TONE: Record<
-  ReturnType<typeof deriveInvoiceStatus>,
-  "default" | "income" | "expense" | "pending"
-> = {
+const STATUS_TONE: Record<DerivedInvoiceStatus, "default" | "income" | "expense" | "pending"> = {
   paid: "income",
   partial: "pending",
   current: "default",
@@ -134,15 +131,7 @@ export function InvoiceDetailView({
             <Card className="p-4">
               <p className="text-muted-foreground text-xs uppercase">Status</p>
               {(() => {
-                const derived = deriveInvoiceStatus(
-                  {
-                    paidCents: invoice.paidCents,
-                    totalCents: invoice.totalCents,
-                    referenceMonth: invoice.referenceMonth,
-                  },
-                  card.closingDay,
-                );
-                const tone = STATUS_TONE[derived];
+                const tone = STATUS_TONE[invoice.status];
                 return (
                   <p
                     className={cn(
@@ -152,7 +141,7 @@ export function InvoiceDetailView({
                       tone === "pending" && "text-pending",
                     )}
                   >
-                    {INVOICE_STATUS_LABEL[derived]}
+                    {INVOICE_STATUS_LABEL[invoice.status]}
                   </p>
                 );
               })()}

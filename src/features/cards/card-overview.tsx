@@ -4,11 +4,7 @@ import { AccountIcon } from "@/components/ui/account-icon";
 import { Card } from "@/components/ui/card";
 import { format } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import {
-  deriveInvoiceStatus,
-  INVOICE_STATUS_LABEL,
-  type DerivedInvoiceStatus,
-} from "./invoice-status";
+import { INVOICE_STATUS_LABEL, type DerivedInvoiceStatus } from "./invoice-status";
 import type { InvoiceNavItem } from "./invoice-queries";
 
 type CardSummary = {
@@ -117,7 +113,6 @@ export function CardOverview({ card, invoices, year }: Props) {
               <InvoiceTile
                 key={monthKey}
                 cardId={card.id}
-                closingDay={card.closingDay}
                 year={year}
                 monthIndex={i}
                 invoice={inv ?? null}
@@ -132,13 +127,11 @@ export function CardOverview({ card, invoices, year }: Props) {
 
 function InvoiceTile({
   cardId,
-  closingDay,
   year,
   monthIndex,
   invoice,
 }: {
   cardId: string;
-  closingDay: number;
   year: number;
   monthIndex: number;
   invoice: InvoiceNavItem | null;
@@ -156,16 +149,8 @@ function InvoiceTile({
     );
   }
 
-  const derived = deriveInvoiceStatus(
-    {
-      paidCents: invoice.paidCents,
-      totalCents: invoice.totalCents,
-      referenceMonth: invoice.referenceMonth,
-    },
-    closingDay,
-  );
-  const tone = STATUS_TONE[derived];
-  const label = INVOICE_STATUS_LABEL[derived];
+  const tone = STATUS_TONE[invoice.status];
+  const label = INVOICE_STATUS_LABEL[invoice.status];
 
   return (
     <Link
