@@ -754,15 +754,15 @@ function formatInvoiceLabel(inv: InvoiceNavItem): string {
   ];
   const month = names[m - 1] ?? String(m).padStart(2, "0");
   const statusLabel =
-    inv.status === "current"
-      ? "atual"
-      : inv.status === "future"
-        ? "futura"
+    inv.status === "open"
+      ? "aberta"
+      : inv.status === "closed"
+        ? "fechada"
         : inv.status === "partial"
           ? "parcial"
           : inv.status === "paid"
             ? "paga"
-            : "atrasada";
+            : "vencida";
   return `${month}/${String(y).slice(-2)} · ${statusLabel}`;
 }
 
