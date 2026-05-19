@@ -30,13 +30,13 @@ import { listInvoicesAction, listOpenInvoicesAction } from "@/features/cards/inv
 import type { InvoiceNavItem } from "@/features/cards/invoice-queries";
 import { createRecurrenceAction } from "@/features/recurrences/actions";
 import { ChevronDown, Repeat } from "lucide-react";
-import { getIconComponent } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import {
   createTransactionAction,
   loadTransactionForEditAction,
   updateTransactionAction,
 } from "./actions";
+import { buildCategoryOptions } from "./category-options";
 import { useTransactionDrawer } from "./transaction-drawer-store";
 import type { FormAccountOption, FormCategoryOption, TransactionTypeValue } from "./types";
 
@@ -736,89 +736,6 @@ export function TransactionDrawer({ accounts, cards, categories }: Props) {
   );
 }
 
-function buildCategoryOptions(categories: FormCategoryOption[]): SearchableSelectItem[] {
-  const parents = categories.filter((c) => !c.parentName);
-  const childrenByParent = new Map<string, FormCategoryOption[]>();
-  for (const c of categories) {
-    if (!c.parentName) continue;
-    const list = childrenByParent.get(c.parentName) ?? [];
-    list.push(c);
-    childrenByParent.set(c.parentName, list);
-  }
-
-  const out: SearchableSelectItem[] = [];
-  for (const parent of parents) {
-    out.push({
-      value: parent.id,
-      label: parent.name,
-      node: <CategoryNode category={parent} />,
-    });
-    for (const child of childrenByParent.get(parent.name) ?? []) {
-      out.push({
-        value: child.id,
-        label: child.name,
-        keywords: parent.name,
-        node: <CategoryNode category={child} indent />,
-      });
-    }
-  }
-
-  // Children whose parent isn't in the list (parent archived, etc.)
-  for (const [parentName, kids] of childrenByParent) {
-    if (parents.some((p) => p.name === parentName)) continue;
-    for (const child of kids) {
-      out.push({
-        value: child.id,
-        label: child.name,
-        keywords: parentName,
-        node: <CategoryNode category={child} indent />,
-      });
-    }
-  }
-
-  return out;
-}
-
-function CategoryNode({ category, indent }: { category: FormCategoryOption; indent?: boolean }) {
-  const Icon = indent ? null : getIconComponent(category.icon ?? null);
-  const color = indent
-    ? (category.parentColor ?? category.color ?? "var(--muted-foreground)")
-    : (category.color ?? "var(--muted-foreground)");
-
-  if (indent) {
-    return (
-      <span className="flex items-center gap-2 pl-5 text-sm">
-        <span className="text-muted-foreground" aria-hidden>
-          └
-        </span>
-        <span
-          className="inline-block size-1.5 rounded-full"
-          style={{ backgroundColor: color }}
-          aria-hidden
-        />
-        {category.name}
-      </span>
-    );
-  }
-
-  return (
-    <span className="flex items-center gap-2 font-medium">
-      <span
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded"
-        style={{ color }}
-        aria-hidden
-      >
-        {Icon ? (
-          <Icon className="size-4" />
-        ) : (
-          <span className="block size-2 rounded-full" style={{ backgroundColor: color }} />
-        )}
-      </span>
-      {category.name}
-    </span>
-  );
-}
-
 function formatInvoiceLabel(inv: InvoiceNavItem): string {
   const [y, m] = inv.referenceMonth.split("-").map(Number) as [number, number, number];
   const names = [
@@ -837,13 +754,15 @@ function formatInvoiceLabel(inv: InvoiceNavItem): string {
   ];
   const month = names[m - 1] ?? String(m).padStart(2, "0");
   const statusLabel =
-    inv.status === "open"
-      ? "aberta"
-      : inv.status === "closed"
-        ? "fechada"
+    inv.status === "current"
+      ? "atual"
+      : inv.status === "future"
+        ? "futura"
         : inv.status === "partial"
           ? "parcial"
-          : "vencida";
+          : inv.status === "paid"
+            ? "paga"
+            : "atrasada";
   return `${month}/${String(y).slice(-2)} · ${statusLabel}`;
 }
 

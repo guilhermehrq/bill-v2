@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
+import { buildCategoryOptions } from "./category-options";
 import type { FormAccountOption, FormCategoryOption } from "./types";
 
 type Props = {
@@ -49,21 +50,9 @@ export function TransactionFilters({ accounts, categories }: Props) {
     [accounts],
   );
 
-  const categoryOptions = useMemo(
-    () =>
-      categories.map((c) => ({
-        id: c.id,
-        label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
-      })),
-    [categories],
-  );
-
   const categoryItems = useMemo<SearchableSelectItem[]>(
-    () => [
-      { value: "all", label: "Todas" },
-      ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
-    ],
-    [categoryOptions],
+    () => [{ value: "all", label: "Todas" }, ...buildCategoryOptions(categories)],
+    [categories],
   );
 
   function pushParams(update: Record<string, string | null>) {
@@ -98,8 +87,11 @@ export function TransactionFilters({ accounts, categories }: Props) {
     if (a) activeChips.push({ key: "account", label: `Conta: ${a.name}` });
   }
   if (categoryId !== "all") {
-    const c = categoryOptions.find((x) => x.id === categoryId);
-    if (c) activeChips.push({ key: "category", label: `Categoria: ${c.label}` });
+    const c = categories.find((x) => x.id === categoryId);
+    if (c) {
+      const label = c.parentName ? `${c.parentName} › ${c.name}` : c.name;
+      activeChips.push({ key: "category", label: `Categoria: ${label}` });
+    }
   }
   if (initialQuery) activeChips.push({ key: "q", label: `"${initialQuery}"` });
 
@@ -175,7 +167,7 @@ export function TransactionFilters({ accounts, categories }: Props) {
               { value: "transfer", label: "Transferências" },
             ]}
           >
-            <SelectTrigger id="filter-type" size="sm" className="w-full">
+            <SelectTrigger id="filter-type" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
