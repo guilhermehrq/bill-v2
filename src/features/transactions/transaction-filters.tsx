@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
 import type { FormAccountOption, FormCategoryOption } from "./types";
 
 type Props = {
@@ -40,6 +41,14 @@ export function TransactionFilters({ accounts, categories }: Props) {
 
   const [search, setSearch] = useState(initialQuery);
 
+  const accountItems = useMemo<SearchableSelectItem[]>(
+    () => [
+      { value: "all", label: "Todas" },
+      ...accounts.map((a) => ({ value: a.id, label: a.name })),
+    ],
+    [accounts],
+  );
+
   const categoryOptions = useMemo(
     () =>
       categories.map((c) => ({
@@ -47,6 +56,14 @@ export function TransactionFilters({ accounts, categories }: Props) {
         label: c.parentName ? `${c.parentName} › ${c.name}` : c.name,
       })),
     [categories],
+  );
+
+  const categoryItems = useMemo<SearchableSelectItem[]>(
+    () => [
+      { value: "all", label: "Todas" },
+      ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
+    ],
+    [categoryOptions],
   );
 
   function pushParams(update: Record<string, string | null>) {
@@ -118,52 +135,30 @@ export function TransactionFilters({ accounts, categories }: Props) {
           <Label htmlFor="filter-account" className="text-xs font-medium">
             Conta
           </Label>
-          <Select
+          <SearchableSelect
+            id="filter-account"
             value={accountId}
-            onValueChange={(v) => pushParams({ account: v })}
-            items={[
-              { value: "all", label: "Todas" },
-              ...accounts.map((a) => ({ value: a.id, label: a.name })),
-            ]}
-          >
-            <SelectTrigger id="filter-account" size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onValueChange={(v) => pushParams({ account: v ?? "all" })}
+            items={accountItems}
+            placeholder="Todas"
+            searchPlaceholder="Buscar conta…"
+            emptyMessage="Nenhuma conta encontrada"
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="filter-category" className="text-xs font-medium">
             Categoria
           </Label>
-          <Select
+          <SearchableSelect
+            id="filter-category"
             value={categoryId}
-            onValueChange={(v) => pushParams({ category: v })}
-            items={[
-              { value: "all", label: "Todas" },
-              ...categoryOptions.map((c) => ({ value: c.id, label: c.label })),
-            ]}
-          >
-            <SelectTrigger id="filter-category" size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="max-h-80">
-              <SelectItem value="all">Todas</SelectItem>
-              {categoryOptions.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onValueChange={(v) => pushParams({ category: v ?? "all" })}
+            items={categoryItems}
+            placeholder="Todas"
+            searchPlaceholder="Buscar categoria…"
+            emptyMessage="Nenhuma categoria encontrada"
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">
