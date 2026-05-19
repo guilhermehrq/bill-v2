@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight, Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { getIconComponent } from "@/lib/icons";
@@ -37,7 +37,10 @@ export function CategoryReportSection({
   emptyMessage,
 }: Props) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [expandedLeaf, setExpandedLeaf] = useState<string | null>(null);
+  const [expandedLeaf, setExpandedLeaf] = useState<{
+    key: string;
+    categoryId: string | null;
+  } | null>(null);
   const [transactionsCache, setTransactionsCache] = useState<
     Record<string, CategoryReportTransaction[]>
   >({});
@@ -46,8 +49,8 @@ export function CategoryReportSection({
 
   const groupKey = (g: CategoryGroupRow) => g.parentCategoryId ?? "__uncategorized__";
 
-  function fetchTransactions(leafKey: string, leafCategoryId: string | null) {
-    if (transactionsCache[leafKey]) return;
+  function fetchTransactions(leafKey: string, leafCategoryId: string | null, force = false) {
+    if (!force && transactionsCache[leafKey]) return;
     setLoadingLeaf(leafKey);
     startTransition(async () => {
       const result = await loadCategoryReportTransactionsAction({
@@ -65,6 +68,18 @@ export function CategoryReportSection({
     });
   }
 
+  // When the period changes, the cached transactions become stale. Drop them
+  // and refetch the currently-open leaf so the user sees fresh data without
+  // having to collapse and re-expand.
+  useEffect(() => {
+    setTransactionsCache({});
+    if (!expandedLeaf) return;
+    fetchTransactions(expandedLeaf.key, expandedLeaf.categoryId, true);
+    // We intentionally only react to period/type changes; expandedLeaf
+    // changes are handled by toggleLeaf directly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to, type]);
+
   function toggleGroup(g: CategoryGroupRow) {
     const key = groupKey(g);
     if (expandedGroup === key) {
@@ -78,17 +93,17 @@ export function CategoryReportSection({
     // fetch its transactions immediately.
     if (g.children.length === 0 && g.parentDirectCents > 0) {
       const leafKey = `${key}${PARENT_DIRECT_SUFFIX}`;
-      setExpandedLeaf(leafKey);
+      setExpandedLeaf({ key: leafKey, categoryId: g.parentCategoryId });
       fetchTransactions(leafKey, g.parentCategoryId);
     }
   }
 
   function toggleLeaf(leafKey: string, leafCategoryId: string | null) {
-    if (expandedLeaf === leafKey) {
+    if (expandedLeaf?.key === leafKey) {
       setExpandedLeaf(null);
       return;
     }
-    setExpandedLeaf(leafKey);
+    setExpandedLeaf({ key: leafKey, categoryId: leafCategoryId });
     fetchTransactions(leafKey, leafCategoryId);
   }
 
@@ -138,7 +153,7 @@ export function CategoryReportSection({
                         <ul className="divide-border divide-y" role="list">
                           {g.children.map((child) => {
                             const leafKey = `${key}:${child.categoryId}`;
-                            const leafExpanded = expandedLeaf === leafKey;
+                            const leafExpanded = expandedLeaf?.key === leafKey;
                             const leafLoading = loadingLeaf === leafKey;
                             return (
                               <li key={leafKey}>
@@ -164,7 +179,7 @@ export function CategoryReportSection({
                           {g.parentDirectCents > 0 &&
                             (() => {
                               const leafKey = `${key}${PARENT_DIRECT_SUFFIX}`;
-                              const leafExpanded = expandedLeaf === leafKey;
+                              const leafExpanded = expandedLeaf?.key === leafKey;
                               const leafLoading = loadingLeaf === leafKey;
                               return (
                                 <li>
