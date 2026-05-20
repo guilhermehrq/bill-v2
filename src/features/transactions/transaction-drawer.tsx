@@ -753,18 +753,17 @@ function formatInvoiceLabel(inv: InvoiceNavItem): string {
     "dez",
   ];
   const month = names[m - 1] ?? String(m).padStart(2, "0");
-  const statusLabel =
-    inv.status === "open"
-      ? "aberta"
-      : inv.status === "closed"
-        ? "fechada"
-        : inv.status === "partial"
-          ? "parcial"
-          : inv.status === "paid"
-            ? "paga"
-            : "vencida";
+  const statusLabel = INVOICE_STATUS_LABEL_LOWER[inv.status];
   return `${month}/${String(y).slice(-2)} · ${statusLabel}`;
 }
+
+const INVOICE_STATUS_LABEL_LOWER: Record<InvoiceNavItem["status"], string> = {
+  paid: "paga",
+  partial: "parcial",
+  current: "atual",
+  future: "futura",
+  overdue: "vencida",
+};
 
 function InstallmentPreview({
   installments,
